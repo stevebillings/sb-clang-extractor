@@ -23,6 +23,11 @@
  */
 package com.blackducksoftware.integration.hub.clang;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
 import javax.annotation.PostConstruct;
 
 import org.slf4j.Logger;
@@ -31,6 +36,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+
+import com.blackducksoftware.integration.hub.bdio.BdioWriter;
+import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
+import com.blackducksoftware.integration.hub.imageinspector.linux.extractor.Extractor;
+import com.google.gson.Gson;
 
 @SpringBootApplication
 public class Application {
@@ -42,6 +52,15 @@ public class Application {
     @Value("${build.dir:.}")
     private String buildDir;
 
+    @Value("${code.location.name:ClangExtractorCodeLocation}")
+    private String codeLocationName;
+
+    @Value("${project.name:ClangExtractorProject}")
+    private String projectName;
+
+    @Value("${project.version:default}")
+    private String projectVersion;
+
     public static void main(final String[] args) {
         new SpringApplicationBuilder(Application.class).logStartupInfo(false).run(args);
     }
@@ -49,9 +68,19 @@ public class Application {
     @PostConstruct
     public void run() {
         try {
-            clangExtractor.extract(buildDir);
+            final SimpleBdioDocument bdioDocument = clangExtractor.extract(buildDir, codeLocationName, projectName, projectVersion);
+            logger.info(String.format("Generated BDIO document BOM spdxName: %s", bdioDocument.billOfMaterials.spdxName));
+            writeBdioToFile(bdioDocument, new File("clangExtractor.jsonld"));
         } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);
+        }
+    }
+
+    private void writeBdioToFile(final SimpleBdioDocument bdioDocument, final File bdioOutputFile) throws IOException, FileNotFoundException {
+        try (FileOutputStream bdioOutputStream = new FileOutputStream(bdioOutputFile)) {
+            try (BdioWriter bdioWriter = new BdioWriter(new Gson(), bdioOutputStream)) {
+                Extractor.writeBdio(bdioWriter, bdioDocument);
+            }
         }
     }
 }

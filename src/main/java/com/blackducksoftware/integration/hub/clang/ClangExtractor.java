@@ -40,6 +40,7 @@ import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.SimpleBdioFactory;
 import com.blackducksoftware.integration.hub.bdio.graph.MutableDependencyGraph;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
+import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
 import com.blackducksoftware.integration.hub.bdio.model.dependency.Dependency;
 import com.blackducksoftware.integration.hub.bdio.model.externalid.ExternalId;
 import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
@@ -55,8 +56,10 @@ public class ClangExtractor {
     // DPKG
     final List<Forge> forges = Arrays.asList(OperatingSystemEnum.UBUNTU.getForge(), OperatingSystemEnum.DEBIAN.getForge());
 
-    public void extract(final String buildDirPath) throws IOException, ExecutableRunnerException, IntegrationException {
+    public SimpleBdioDocument extract(final String buildDirPath, final String codeLocationName, final String projectName, final String projectVersion) throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
+        final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(forges.get(0), projectName, projectVersion);
+        final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final File buildDir = new File(buildDirPath);
         final File compileCommandsJsonFile = new File(buildDir, "compile_commands.json");
@@ -67,6 +70,8 @@ public class ClangExtractor {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
             processCompileCommand(dependencyGraph, compileCommand);
         }
+        new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
+        return bdioDocument;
     }
 
     private void processCompileCommand(final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) throws ExecutableRunnerException, IOException, IntegrationException {
