@@ -32,13 +32,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 import com.google.gson.Gson;
 
 @Component
 public class ClangExtractor {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    public void extract(final String buildDirPath) throws IOException {
+    public void extract(final String buildDirPath) throws IOException, ExecutableRunnerException {
         logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
         final File buildDir = new File(buildDirPath);
         final File compileCommandsJsonFile = new File(buildDir, "compile_commands.json");
@@ -50,6 +52,9 @@ public class ClangExtractor {
 
             final String generateDepsMkCommand = String.format("%s -M -MF deps.mk", compileCommand.command);
             logger.info(String.format("cd %s; %s", compileCommand.directory, generateDepsMkCommand));
+
+            final String stdoutString = SimpleExecutor.execute(new File(compileCommand.directory), null, compileCommand.command);
+            logger.info(String.format("Output: %s", stdoutString));
         }
     }
 

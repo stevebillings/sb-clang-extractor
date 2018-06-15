@@ -23,8 +23,6 @@
  */
 package com.blackducksoftware.integration.hub.clang;
 
-import java.io.IOException;
-
 import javax.annotation.PostConstruct;
 
 import org.slf4j.Logger;
@@ -48,7 +46,7 @@ public class Application {
     public void run() {
         try {
             clangExtractor.extract("src/test/resources/buildDir");
-        } catch (final IOException e) {
+        } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);
         }
     }

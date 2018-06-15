@@ -24,12 +24,11 @@
 package com.blackducksoftware.integration.hub.clang.execute.fromdetect;
 
 import java.io.File;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,25 +36,25 @@ public class Executable {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final File workingDirectory;
     private final Map<String, String> environmentVariables = new HashMap<>();
-    private final String executablePath;
-    private final List<String> executableArguments = new ArrayList<>();
+    private final String cmd;
 
-    public Executable(final File workingDirectory, final String executablePath, final List<String> executableArguments) {
+    public Executable(final File workingDirectory, final String cmd) {
         this.workingDirectory = workingDirectory;
-        this.executablePath = executablePath;
-        this.executableArguments.addAll(executableArguments);
+        this.cmd = cmd;
     }
 
-    public Executable(final File workingDirectory, final Map<String, String> environmentVariables, final String executablePath, final List<String> executableArguments) {
+    public Executable(final File workingDirectory, final Map<String, String> environmentVariables, final String cmd) {
         this.workingDirectory = workingDirectory;
-        this.environmentVariables.putAll(environmentVariables);
-        this.executablePath = executablePath;
-        this.executableArguments.addAll(executableArguments);
+        if (environmentVariables != null) {
+            this.environmentVariables.putAll(environmentVariables);
+        }
+        this.cmd = cmd;
     }
 
     public ProcessBuilder createProcessBuilder() {
         logger.info("createProcessBuilder()");
-        final List<String> processBuilderArguments = createProcessBuilderArguments();
+        final String[] cmdArgArray = cmd.split("\\s+");
+        final List<String> processBuilderArguments = Arrays.asList(cmdArgArray);
         final ProcessBuilder processBuilder = new ProcessBuilder(processBuilderArguments);
         processBuilder.directory(workingDirectory);
         final Map<String, String> processBuilderEnvironment = processBuilder.environment();
@@ -69,31 +68,8 @@ public class Executable {
         return processBuilder;
     }
 
-    public String getMaskedExecutableDescription() {
-        final List<String> arguments = new ArrayList<>();
-        for (final String argument : createProcessBuilderArguments()) {
-            if (argument.matches(".*password.*=.*")) {
-                final String maskedArgument = argument.substring(0, argument.indexOf('=') + 1) + "********";
-                arguments.add(maskedArgument);
-            } else {
-                arguments.add(argument);
-            }
-        }
-        return StringUtils.join(arguments, ' ');
-    }
-
-    public String getExecutableDescription() {
-        return StringUtils.join(createProcessBuilderArguments(), ' ');
-    }
-
-    private List<String> createProcessBuilderArguments() {
-        // ProcessBuilder can only be called with a List<java.lang.String> so do any needed conversion
-        final List<String> processBuilderArguments = new ArrayList<>();
-        processBuilderArguments.add(executablePath.toString());
-        for (final String arg : executableArguments) {
-            processBuilderArguments.add(arg.toString());
-        }
-        return processBuilderArguments;
+    public String getDescription() {
+        return cmd;
     }
 
     private void populateEnvironmentMap(final Map<String, String> environment, final Object key, final Object value) {
