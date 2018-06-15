@@ -37,8 +37,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
+import com.blackducksoftware.integration.hub.bdio.SimpleBdioFactory;
+import com.blackducksoftware.integration.hub.bdio.graph.MutableDependencyGraph;
+import com.blackducksoftware.integration.hub.bdio.model.Forge;
+import com.blackducksoftware.integration.hub.bdio.model.dependency.Dependency;
+import com.blackducksoftware.integration.hub.bdio.model.externalid.ExternalId;
 import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
+import com.blackducksoftware.integration.hub.imageinspector.lib.OperatingSystemEnum;
 import com.google.gson.Gson;
 
 @Component
@@ -46,8 +52,12 @@ public class ClangExtractor {
     private static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    // DPKG
+    final List<Forge> forges = Arrays.asList(OperatingSystemEnum.UBUNTU.getForge(), OperatingSystemEnum.DEBIAN.getForge());
+
     public void extract(final String buildDirPath) throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
+        final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final File buildDir = new File(buildDirPath);
         final File compileCommandsJsonFile = new File(buildDir, "compile_commands.json");
         final String compileCommandsJson = FileUtils.readFileToString(compileCommandsJsonFile, StandardCharsets.UTF_8);
@@ -55,25 +65,41 @@ public class ClangExtractor {
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-            processCompileCommand(compileCommand);
+            processCompileCommand(dependencyGraph, compileCommand);
         }
     }
 
-    private void processCompileCommand(final CompileCommand compileCommand) throws ExecutableRunnerException, IOException, IntegrationException {
+    private void processCompileCommand(final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) throws ExecutableRunnerException, IOException, IntegrationException {
         final File depsMkFile = new File(DEPS_MK_PATH);
         final String generateDependenciesFileCommand = String.format("%s -M -MF %s", compileCommand.command, depsMkFile.getAbsolutePath());
         SimpleExecutor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
 
         final List<String> dependencyFilePaths = getDependencyFilePaths(depsMkFile);
         final List<File> dependencyFiles = getDependencyFiles(dependencyFilePaths);
-        getPackages(dependencyFiles);
+        getPackages(dependencyGraph, dependencyFiles);
     }
 
-    private void getPackages(final List<File> dependencyFiles) {
+    private void getPackages(final MutableDependencyGraph dependencyGraph, final List<File> dependencyFiles) {
         for (final File dependencyFile : dependencyFiles) {
-            final Optional<String> packageName = getPackageName(dependencyFile);
+            final Optional<String[]> packageNameArch = getPackageNameArch(dependencyFile);
+            final Optional<String> packageName = getPackageName(packageNameArch);
+            final Optional<String> packageArch = getPackageArch(packageNameArch);
             final Optional<String> packageVersion = getPackageVersion(packageName);
-            logger.info(String.format("Package name:version: %s:%s", packageName.orElse("<missing>"), packageVersion.orElse("<missing>")));
+            logger.info(String.format("Package name//arch//version: %s//%s//%s", packageName.orElse("<missing>"), packageArch.orElse("<missing>"), packageVersion.orElse("<missing>")));
+            if (packageName.isPresent() && packageArch.isPresent() && packageVersion.isPresent()) {
+                createBdioComponent(dependencyGraph, packageName.get(), packageVersion.get(), packageArch.get());
+            }
+        }
+    }
+
+    private void createBdioComponent(final MutableDependencyGraph dependencies, final String name, final String version, final String arch) {
+        final String externalId = String.format("%s/%s/%s", name, version, arch);
+        logger.trace(String.format("Constructed externalId: %s", externalId));
+        for (final Forge forge : forges) {
+            final ExternalId extId = new SimpleBdioFactory().createArchitectureExternalId(forge, name, version, arch);
+            final Dependency dep = new SimpleBdioFactory().createDependency(name, version, extId); // createDependencyNode(forge, name, version, arch);
+            logger.info(String.format("*** forge: %s: adding %s version %s as child to dependency node tree; externalId: %s", forge.getName(), dep.name, dep.version, dep.externalId.createBdioId()));
+            dependencies.addChildToRoot(dep);
         }
     }
 
@@ -109,20 +135,32 @@ public class ClangExtractor {
         return Optional.empty();
     }
 
-    private Optional<String> getPackageName(final File dependencyFile) {
-        Optional<String> packageName = Optional.empty();
+    private Optional<String[]> getPackageNameArch(final File dependencyFile) {
         final String getPackageCommand = String.format("dpkg -S %s", dependencyFile.getAbsolutePath());
         try {
             final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] queryPackageOutputParts = queryPackageOutput.split("\\s+");
             final String[] packageNameArchParts = queryPackageOutputParts[0].split(":");
-            packageName = Optional.of(packageNameArchParts[0]);
+            return Optional.of(packageNameArchParts);
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
+            return Optional.empty();
         }
-        logger.info(String.format("packageName: %s", packageName));
-        return packageName;
+    }
+
+    private Optional<String> getPackageName(final Optional<String[]> packageNameArch) {
+        if (packageNameArch.isPresent()) {
+            return Optional.of(packageNameArch.get()[0]);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> getPackageArch(final Optional<String[]> packageNameArch) {
+        if (packageNameArch.isPresent()) {
+            return Optional.of(packageNameArch.get()[1]);
+        }
+        return Optional.empty();
     }
 
     private List<String> getDependencyFilePaths(final File depsMkFile) throws IOException {

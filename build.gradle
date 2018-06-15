@@ -43,7 +43,8 @@ targetCompatibility = 1.8
 springBoot { mainClassName = 'com.blackducksoftware.integration.hub.clang.Application' }
 
 dependencies {
-    compile("com.blackducksoftware.integration:integration-common:9.2.0")
+    compile 'com.blackducksoftware.integration:hub-common:33.2.0'
+    compile 'com.blackducksoftware.integration:hub-imageinspector-lib:3.1.1'
     compile("org.springframework.boot:spring-boot:2.0.3.RELEASE")
     compile("org.springframework.boot:spring-boot-autoconfigure:2.0.3.RELEASE")
     compile("org.springframework.boot:spring-boot-starter")
