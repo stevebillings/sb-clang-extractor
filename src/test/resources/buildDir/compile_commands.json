@@ -1,0 +1,7 @@
+[
+{
+  "directory": "src/test/resources/buildDir",
+  "command": "g++ src/test/resources/buildDir/hello_world.cpp",
+  "file": "src/test/resources/buildDir/hello_world.cpp"
+}
+]
