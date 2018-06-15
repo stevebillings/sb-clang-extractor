@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -63,11 +64,68 @@ public class ClangExtractor {
         final String generateDependenciesFileCommand = String.format("%s -M -MF %s", compileCommand.command, depsMkFile.getAbsolutePath());
         SimpleExecutor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
 
-        final List<String> dependencies = getDependencies(depsMkFile);
-        final List<File> dependencyFiles = getDependencyFiles(dependencies);
+        final List<String> dependencyFilePaths = getDependencyFilePaths(depsMkFile);
+        final List<File> dependencyFiles = getDependencyFiles(dependencyFilePaths);
+        getPackages(dependencyFiles);
     }
 
-    private List<String> getDependencies(final File depsMkFile) throws IOException {
+    private void getPackages(final List<File> dependencyFiles) {
+        for (final File dependencyFile : dependencyFiles) {
+            final Optional<String> packageName = getPackageName(dependencyFile);
+            final Optional<String> packageVersion = getPackageVersion(packageName);
+            logger.info(String.format("Package name:version: %s:%s", packageName.orElse("<missing>"), packageVersion.orElse("<missing>")));
+        }
+    }
+
+    private Optional<String> getPackageVersion(final Optional<String> packageName) {
+        Optional<String> packageVersion = Optional.empty();
+        if (packageName.isPresent()) {
+            final String getPackageVersionCommand = String.format("dpkg -s %s", packageName.get());
+            try {
+                final String packageStatusOutput = SimpleExecutor.execute(new File("."), null, getPackageVersionCommand);
+                logger.info(String.format("packageStatusOutput: %s", packageStatusOutput));
+                packageVersion = getPackageVersionFromStatusOutput(packageName.get(), packageStatusOutput);
+            } catch (ExecutableRunnerException | IntegrationException e) {
+                logger.error(String.format("Error executing %s: %s", getPackageVersionCommand, e.getMessage()));
+            }
+        }
+        return packageVersion;
+    }
+
+    private Optional<String> getPackageVersionFromStatusOutput(final String packageName, final String packageStatusOutput) {
+        final String[] packageStatusOutputLines = packageStatusOutput.split("\\n");
+        for (final String packageStatusOutputLine : packageStatusOutputLines) {
+            final String[] packageStatusOutputLineNameValue = packageStatusOutputLine.split(":\\s+");
+            final String label = packageStatusOutputLineNameValue[0];
+            final String value = packageStatusOutputLineNameValue[1];
+            if ("Status".equals(label.trim()) && !value.contains("installed")) {
+                logger.info(String.format("%s is not installed; Status is: %s", packageName, value));
+                return Optional.empty();
+            }
+            if ("Version".equals(label)) {
+                return Optional.of(value);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> getPackageName(final File dependencyFile) {
+        Optional<String> packageName = Optional.empty();
+        final String getPackageCommand = String.format("dpkg -S %s", dependencyFile.getAbsolutePath());
+        try {
+            final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
+            logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
+            final String[] queryPackageOutputParts = queryPackageOutput.split("\\s+");
+            final String[] packageNameArchParts = queryPackageOutputParts[0].split(":");
+            packageName = Optional.of(packageNameArchParts[0]);
+        } catch (ExecutableRunnerException | IntegrationException e) {
+            logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
+        }
+        logger.info(String.format("packageName: %s", packageName));
+        return packageName;
+    }
+
+    private List<String> getDependencyFilePaths(final File depsMkFile) throws IOException {
         final String depsDecl = FileUtils.readFileToString(depsMkFile, StandardCharsets.UTF_8);
         final String[] depsDeclParts = depsDecl.split(": ");
         String depsListString = depsDeclParts[1];
