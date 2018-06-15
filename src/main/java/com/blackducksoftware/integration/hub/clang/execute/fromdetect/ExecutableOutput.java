@@ -27,10 +27,12 @@ import java.util.Arrays;
 import java.util.List;
 
 public class ExecutableOutput {
+    private final int returnCode;
     private final String standardOutput;
     private final String errorOutput;
 
-    public ExecutableOutput(final String standardOutput, final String errorOutput) {
+    public ExecutableOutput(final int returnCode, final String standardOutput, final String errorOutput) {
+        this.returnCode = returnCode;
         this.standardOutput = standardOutput;
         this.errorOutput = errorOutput;
     }
@@ -42,4 +44,9 @@ public class ExecutableOutput {
     public List<String> getErrorOutputAsList() {
         return Arrays.asList(errorOutput.split(System.lineSeparator()));
     }
+
+    public int getReturnCode() {
+        return returnCode;
+    }
+
 }

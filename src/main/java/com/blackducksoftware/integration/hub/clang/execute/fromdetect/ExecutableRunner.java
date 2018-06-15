@@ -35,7 +35,7 @@ public class ExecutableRunner {
     private final Logger logger = LoggerFactory.getLogger(ExecutableRunner.class);
 
     public ExecutableOutput execute(final Executable executable) throws ExecutableRunnerException {
-        logger.info(String.format("Running executable >%s", executable.getDescription()));
+        logger.info(String.format("Running executable: %s", executable.getDescription()));
         try {
             final ProcessBuilder processBuilder = executable.createProcessBuilder();
             final Process process = processBuilder.start();
@@ -48,7 +48,7 @@ public class ExecutableRunner {
                 errorOutputThread.start();
 
                 final int returnCode = process.waitFor();
-                logger.info("Executable finished: " + returnCode);
+                logger.debug("Executable finished: " + returnCode);
 
                 standardOutputThread.join();
                 errorOutputThread.join();
@@ -56,7 +56,7 @@ public class ExecutableRunner {
                 final String standardOutput = standardOutputThread.getExecutableOutput().trim();
                 final String errorOutput = errorOutputThread.getExecutableOutput().trim();
 
-                final ExecutableOutput output = new ExecutableOutput(standardOutput, errorOutput);
+                final ExecutableOutput output = new ExecutableOutput(returnCode, standardOutput, errorOutput);
                 return output;
             }
         } catch (final Exception e) {

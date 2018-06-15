@@ -24,6 +24,7 @@
 package com.blackducksoftware.integration.hub.clang.execute;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +32,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.Executable;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableOutput;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunner;
@@ -39,8 +41,16 @@ import com.blackducksoftware.integration.hub.clang.execute.fromdetect.Executable
 public class SimpleExecutor {
     private static final Logger logger = LoggerFactory.getLogger(SimpleExecutor.class);
 
-    public static String execute(final File workingDir, final Map<String, String> environmentVariables, final String cmd) throws ExecutableRunnerException {
+    public static String execute(final File workingDir, Map<String, String> environmentVariables, final String cmd) throws ExecutableRunnerException, IntegrationException {
         logger.info(String.format("Executing %s in %s", cmd, workingDir));
+        final String newPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+        if (environmentVariables == null) {
+            environmentVariables = new HashMap<>();
+        }
+        String path = environmentVariables.get("PATH");
+        path = path == null ? newPath : String.format("%s:%s", path, newPath);
+        environmentVariables.put("PATH", path);
+        logger.info(String.format("Env: %s", environmentVariables));
         final Executable executor = new Executable(workingDir, environmentVariables, cmd);
         final ExecutableRunner runner = new ExecutableRunner();
         final ExecutableOutput out = runner.execute(executor);
@@ -49,6 +59,9 @@ public class SimpleExecutor {
         final String stderrString = StringUtils.join(stderrList, '\n');
         final String stdoutString = StringUtils.join(stdout, '\n');
         logger.trace(String.format("Command: '%s'; Output: %s; stderr: %s", cmd, stdoutString, stderrString));
+        if (out.getReturnCode() != 0) {
+            throw new IntegrationException(String.format("Command '%s' return code: %d; stderr: %s", cmd, out.getReturnCode(), stderrString));
+        }
         return stdoutString;
     }
 }

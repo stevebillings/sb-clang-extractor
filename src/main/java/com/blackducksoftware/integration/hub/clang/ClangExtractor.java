@@ -26,21 +26,26 @@ package com.blackducksoftware.integration.hub.clang;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 import com.google.gson.Gson;
 
 @Component
 public class ClangExtractor {
+    private static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    public void extract(final String buildDirPath) throws IOException, ExecutableRunnerException {
+    public void extract(final String buildDirPath) throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
         final File buildDir = new File(buildDirPath);
         final File compileCommandsJsonFile = new File(buildDir, "compile_commands.json");
@@ -49,13 +54,49 @@ public class ClangExtractor {
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-
-            final String generateDepsMkCommand = String.format("%s -M -MF deps.mk", compileCommand.command);
-            logger.info(String.format("cd %s; %s", compileCommand.directory, generateDepsMkCommand));
-
-            final String stdoutString = SimpleExecutor.execute(new File(compileCommand.directory), null, compileCommand.command);
-            logger.info(String.format("Output: %s", stdoutString));
+            processCompileCommand(compileCommand);
         }
     }
 
+    private void processCompileCommand(final CompileCommand compileCommand) throws ExecutableRunnerException, IOException, IntegrationException {
+        final File depsMkFile = new File(DEPS_MK_PATH);
+        final String generateDependenciesFileCommand = String.format("%s -M -MF %s", compileCommand.command, depsMkFile.getAbsolutePath());
+        SimpleExecutor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
+
+        final List<String> dependencies = getDependencies(depsMkFile);
+        final List<File> dependencyFiles = getDependencyFiles(dependencies);
+    }
+
+    private List<String> getDependencies(final File depsMkFile) throws IOException {
+        final String depsDecl = FileUtils.readFileToString(depsMkFile, StandardCharsets.UTF_8);
+        final String[] depsDeclParts = depsDecl.split(": ");
+        String depsListString = depsDeclParts[1];
+        logger.info(String.format("dependencies: %s", depsListString));
+
+        depsListString = depsListString.replaceAll("\n", " ");
+        logger.info(String.format("dependencies, newlines removed: %s", depsListString));
+
+        depsListString = depsListString.replaceAll("\\\\", " ");
+        logger.info(String.format("dependencies, backslashes removed: %s", depsListString));
+
+        final String[] deps = depsListString.split("\\s+");
+        for (final String includeFile : deps) {
+            logger.info(String.format("\t%s", includeFile));
+        }
+        return Arrays.asList(deps);
+    }
+
+    private List<File> getDependencyFiles(final List<String> dependencies) {
+        final List<File> dependencyFiles = new ArrayList<>(dependencies.size());
+        for (final String dependency : dependencies) {
+            final File dependencyFile = new File(dependency);
+            if (!dependencyFile.exists()) {
+                logger.error(String.format("%s does not exist", dependencyFile.getAbsolutePath()));
+            } else {
+                logger.info(String.format("Happily, %s exists", dependencyFile.getAbsolutePath()));
+                dependencyFiles.add(dependencyFile);
+            }
+        }
+        return dependencyFiles;
+    }
 }

@@ -28,6 +28,7 @@ import javax.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
@@ -38,6 +39,9 @@ public class Application {
     @Autowired
     private ClangExtractor clangExtractor;
 
+    @Value("${build.dir:.}")
+    private String buildDir;
+
     public static void main(final String[] args) {
         new SpringApplicationBuilder(Application.class).logStartupInfo(false).run(args);
     }
@@ -45,7 +49,7 @@ public class Application {
     @PostConstruct
     public void run() {
         try {
-            clangExtractor.extract("src/test/resources/buildDir");
+            clangExtractor.extract(buildDir);
         } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);
         }
