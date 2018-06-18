@@ -68,6 +68,11 @@ public class Rpm implements PkgMgr {
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] packageLines = queryPackageOutput.split("\n");
             for (final String packageLine : packageLines) {
+                if (!valid(packageLine)) {
+                    logger.debug(String.format("Skipping line: %s", packageLine));
+                    continue;
+                }
+                // TODO Same code exists in ii lib: RpmExtractor
                 final int lastDotIndex = packageLine.lastIndexOf('.');
                 final String arch = packageLine.substring(lastDotIndex + 1);
                 final int lastDashIndex = packageLine.lastIndexOf('-');
@@ -105,7 +110,7 @@ public class Rpm implements PkgMgr {
         return logger;
     }
 
-    // TODO next two methods: Same code exists in ii lib: RpmExtractor
+    // TODO Same code exists in ii lib: RpmExtractor
     private boolean valid(final String packageLine) {
         return packageLine.matches(".+-.+-.+\\..*");
     }

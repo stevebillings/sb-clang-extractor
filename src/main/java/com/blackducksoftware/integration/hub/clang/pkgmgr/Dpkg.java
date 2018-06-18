@@ -46,6 +46,7 @@ public class Dpkg implements PkgMgr {
     private static final String PKG_MGR_NAME = "dpkg";
     private static final String VERSION_COMMAND = "dpkg --version";
     private static final String EXPECTED_TEXT = "package management program version";
+    private static final String QUERY_DEPENDENCY_FILE_COMMAND_PATTERN = "dpkg -S %s";
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -84,43 +85,55 @@ public class Dpkg implements PkgMgr {
     @Override
     public List<DependencyDetails> getDependencyDetails(final File dependencyFile) {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
-        // what about case where it finds nothing??
-        final Optional<String[]> packageNameArch = getPackageNameArch(dependencyFile);
-        final Optional<String> packageName = getPackageName(packageNameArch);
-        final Optional<String> packageArch = getPackageArch(packageNameArch);
-        final Optional<String> packageVersion = getPackageVersion(packageName);
-        final DependencyDetails dependencyDetails = new DependencyDetails(packageName, packageVersion, packageArch);
-
-        dependencyDetailsList.add(dependencyDetails);
-        return dependencyDetailsList;
-    }
-
-    private Optional<String[]> getPackageNameArch(final File dependencyFile) {
-        final String getPackageCommand = String.format("dpkg -S %s", dependencyFile.getAbsolutePath());
+        final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
         try {
             final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
-            final String[] queryPackageOutputParts = queryPackageOutput.split("\\s+");
-            final String[] packageNameArchParts = queryPackageOutputParts[0].split(":");
-            return Optional.of(packageNameArchParts);
+            addToPackageList(dependencyDetailsList, queryPackageOutput);
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
-            return Optional.empty();
+
+        }
+        return dependencyDetailsList;
+    }
+
+    private void addToPackageList(final List<DependencyDetails> dependencyDetailsList, final String queryPackageOutput) {
+        final String[] packageLines = queryPackageOutput.split("\n");
+        for (final String packageLine : packageLines) {
+            if (!valid(packageLine)) {
+                logger.info(String.format("Skipping line: %s", packageLine));
+                continue;
+            }
+            final String[] queryPackageOutputParts = packageLine.split("\\s+");
+            final String[] packageNameArchParts = queryPackageOutputParts[0].split(":");
+            final String packageName = packageNameArchParts[0];
+            final String packageArch = packageNameArchParts[1];
+            logger.debug(String.format("package name: %s; arch: %s", packageName, packageArch));
+            final Optional<String> packageVersion = getPackageVersion(packageName);
+            final DependencyDetails dependencyDetails = new DependencyDetails(Optional.of(packageName), packageVersion, Optional.of(packageArch));
+            dependencyDetailsList.add(dependencyDetails);
         }
     }
 
-    private Optional<String> getPackageVersion(final Optional<String> packageName) {
-        if (packageName.isPresent()) {
-            final String getPackageVersionCommand = String.format("dpkg -s %s", packageName.get());
-            try {
-                final String packageStatusOutput = SimpleExecutor.execute(new File("."), null, getPackageVersionCommand);
-                logger.info(String.format("packageStatusOutput: %s", packageStatusOutput));
-                final Optional<String> packageVersion = getPackageVersionFromStatusOutput(packageName.get(), packageStatusOutput);
-                return packageVersion;
-            } catch (ExecutableRunnerException | IntegrationException e) {
-                logger.error(String.format("Error executing %s: %s", getPackageVersionCommand, e.getMessage()));
-            }
+    private boolean valid(final String packageLine) {
+        if (packageLine.matches(".+:.+: .+")) {
+            return true;
         }
+        return false;
+    }
+
+    private Optional<String> getPackageVersion(final String packageName) {
+
+        final String getPackageVersionCommand = String.format("dpkg -s %s", packageName);
+        try {
+            final String packageStatusOutput = SimpleExecutor.execute(new File("."), null, getPackageVersionCommand);
+            logger.info(String.format("packageStatusOutput: %s", packageStatusOutput));
+            final Optional<String> packageVersion = getPackageVersionFromStatusOutput(packageName, packageStatusOutput);
+            return packageVersion;
+        } catch (ExecutableRunnerException | IntegrationException e) {
+            logger.error(String.format("Error executing %s: %s", getPackageVersionCommand, e.getMessage()));
+        }
+
         return Optional.empty();
     }
 
@@ -140,19 +153,4 @@ public class Dpkg implements PkgMgr {
         }
         return Optional.empty();
     }
-
-    private Optional<String> getPackageName(final Optional<String[]> packageNameArch) {
-        if (packageNameArch.isPresent()) {
-            return Optional.of(packageNameArch.get()[0]);
-        }
-        return Optional.empty();
-    }
-
-    private Optional<String> getPackageArch(final Optional<String[]> packageNameArch) {
-        if (packageNameArch.isPresent()) {
-            return Optional.of(packageNameArch.get()[1]);
-        }
-        return Optional.empty();
-    }
-
 }
