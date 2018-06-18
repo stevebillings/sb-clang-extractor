@@ -38,7 +38,6 @@ import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
 import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
-import com.blackducksoftware.integration.hub.imageinspector.lib.OperatingSystemEnum;
 
 @Component
 public class Dpkg implements PkgMgr {
@@ -50,7 +49,7 @@ public class Dpkg implements PkgMgr {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final List<Forge> forges = Arrays.asList(OperatingSystemEnum.UBUNTU.getForge(), OperatingSystemEnum.DEBIAN.getForge());
+    private final List<Forge> forges = Arrays.asList(Forge.UBUNTU, Forge.DEBIAN);
 
     @Override
     public Forge getDefaultForge() {

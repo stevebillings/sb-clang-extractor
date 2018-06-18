@@ -38,7 +38,6 @@ import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
 import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
-import com.blackducksoftware.integration.hub.imageinspector.lib.OperatingSystemEnum;
 
 @Component
 public class Rpm implements PkgMgr {
@@ -47,7 +46,7 @@ public class Rpm implements PkgMgr {
     private static final String VERSION_COMMAND = "rpm --version";
     private static final String EXPECTED_TEXT = "RPM version";
 
-    private final List<Forge> forges = Arrays.asList(OperatingSystemEnum.CENTOS.getForge(), OperatingSystemEnum.FEDORA.getForge(), OperatingSystemEnum.RHEL.getForge());
+    private final List<Forge> forges = Arrays.asList(Forge.CENTOS, Forge.FEDORA, Forge.REDHAT);
 
     @Override
     public Forge getDefaultForge() {

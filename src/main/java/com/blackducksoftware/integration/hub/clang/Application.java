@@ -38,8 +38,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
 import com.blackducksoftware.integration.hub.bdio.BdioWriter;
+import com.blackducksoftware.integration.hub.bdio.SimpleBdioFactory;
 import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
-import com.blackducksoftware.integration.hub.imageinspector.linux.extractor.Extractor;
 import com.google.gson.Gson;
 
 @SpringBootApplication
@@ -79,7 +79,7 @@ public class Application {
     private void writeBdioToFile(final SimpleBdioDocument bdioDocument, final File bdioOutputFile) throws IOException, FileNotFoundException {
         try (FileOutputStream bdioOutputStream = new FileOutputStream(bdioOutputFile)) {
             try (BdioWriter bdioWriter = new BdioWriter(new Gson(), bdioOutputStream)) {
-                Extractor.writeBdio(bdioWriter, bdioDocument);
+                new SimpleBdioFactory().writeSimpleBdioDocument(bdioWriter, bdioDocument);
             }
         }
     }
