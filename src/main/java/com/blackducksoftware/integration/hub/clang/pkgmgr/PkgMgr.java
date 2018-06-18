@@ -31,6 +31,8 @@ import com.blackducksoftware.integration.hub.clang.DependencyDetails;
 
 public interface PkgMgr {
 
+    boolean applies();
+
     Forge getDefaultForge();
 
     List<Forge> getForges();

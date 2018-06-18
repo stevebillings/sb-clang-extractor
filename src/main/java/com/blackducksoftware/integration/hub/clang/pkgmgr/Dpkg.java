@@ -30,6 +30,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
@@ -38,11 +39,31 @@ import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 import com.blackducksoftware.integration.hub.imageinspector.lib.OperatingSystemEnum;
 
+@Component
 public class Dpkg implements PkgMgr {
+
+    private static final String DPKG_VERSION_COMMAND = "dpkg --version";
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final List<Forge> forges = Arrays.asList(OperatingSystemEnum.UBUNTU.getForge(), OperatingSystemEnum.DEBIAN.getForge());
+
+    @Override
+    public boolean applies() {
+        try {
+            final String versionOutput = SimpleExecutor.execute(new File("."), null, DPKG_VERSION_COMMAND);
+            logger.trace(String.format("packageStatusOutput: %s", versionOutput));
+            if (versionOutput.contains("package management program version")) {
+                logger.info("Found package manager dpkg");
+                return true;
+            }
+            logger.debug(String.format("Output of %s does not look right; concluding that the dpkg package manager is not present. The output: %s", DPKG_VERSION_COMMAND, versionOutput));
+        } catch (ExecutableRunnerException | IntegrationException e) {
+            logger.debug(String.format("Error executing %s; concluding that the dpkg package manager is not present. The error: %s", DPKG_VERSION_COMMAND, e.getMessage()));
+            return false;
+        }
+        return false;
+    }
 
     @Override
     public Forge getDefaultForge() {
@@ -122,4 +143,5 @@ public class Dpkg implements PkgMgr {
         }
         return Optional.empty();
     }
+
 }

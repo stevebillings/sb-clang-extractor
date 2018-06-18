@@ -30,9 +30,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import javax.annotation.PostConstruct;
+
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
@@ -44,7 +47,7 @@ import com.blackducksoftware.integration.hub.bdio.model.dependency.Dependency;
 import com.blackducksoftware.integration.hub.bdio.model.externalid.ExternalId;
 import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
-import com.blackducksoftware.integration.hub.clang.pkgmgr.Dpkg;
+import com.blackducksoftware.integration.hub.clang.pkgmgr.PkgMgr;
 import com.google.gson.Gson;
 
 @Component
@@ -52,11 +55,25 @@ public class ClangExtractor {
     private static final String COMPILE_COMMANDS_JSON_FILENAME = "compile_commands.json";
     private static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
-    private final Dpkg behavior = new Dpkg(); // TODO replace w/ composition; rename
+    private PkgMgr pkgMgr = null;
+
+    @Autowired
+    private List<PkgMgr> pkgMgrs;
+
+    @PostConstruct
+    public void init() throws IntegrationException {
+        for (final PkgMgr pkgMgr : pkgMgrs) {
+            if (pkgMgr.applies()) {
+                this.pkgMgr = pkgMgr;
+                return;
+            }
+        }
+        throw new IntegrationException("Unable to execute any supported package manager; Please make sure that one of the supported package managers is on the PATH");
+    }
 
     public SimpleBdioDocument extract(final String buildDirPath, final String codeLocationName, final String projectName, final String projectVersion) throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
-        final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(behavior.getDefaultForge(), projectName, projectVersion);
+        final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(pkgMgr.getDefaultForge(), projectName, projectVersion);
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final File buildDir = new File(buildDirPath);
@@ -84,7 +101,7 @@ public class ClangExtractor {
 
     private void getPackages(final MutableDependencyGraph dependencyGraph, final List<File> dependencyFiles) {
         for (final File dependencyFile : dependencyFiles) {
-            final DependencyDetails dependencyDetails = behavior.getDependencyDetails(dependencyFile);
+            final DependencyDetails dependencyDetails = pkgMgr.getDependencyDetails(dependencyFile);
             logger.info(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
                     dependencyDetails.getPackageVersion().orElse("<missing>")));
             if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
@@ -96,7 +113,7 @@ public class ClangExtractor {
     private void createBdioComponent(final MutableDependencyGraph dependencies, final String name, final String version, final String arch) {
         final String externalId = String.format("%s/%s/%s", name, version, arch);
         logger.trace(String.format("Constructed externalId: %s", externalId));
-        for (final Forge forge : behavior.getForges()) {
+        for (final Forge forge : pkgMgr.getForges()) {
             final ExternalId extId = new SimpleBdioFactory().createArchitectureExternalId(forge, name, version, arch);
             final Dependency dep = new SimpleBdioFactory().createDependency(name, version, extId); // createDependencyNode(forge, name, version, arch);
             logger.info(String.format("*** forge: %s: adding %s version %s as child to dependency node tree; externalId: %s", forge.getName(), dep.name, dep.version, dep.externalId.createBdioId()));
