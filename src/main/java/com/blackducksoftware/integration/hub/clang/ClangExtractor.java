@@ -101,11 +101,13 @@ public class ClangExtractor {
 
     private void getPackages(final MutableDependencyGraph dependencyGraph, final List<File> dependencyFiles) {
         for (final File dependencyFile : dependencyFiles) {
-            final DependencyDetails dependencyDetails = pkgMgr.getDependencyDetails(dependencyFile);
-            logger.info(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
-                    dependencyDetails.getPackageVersion().orElse("<missing>")));
-            if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
-                createBdioComponent(dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
+            final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(dependencyFile);
+            for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
+                logger.info(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
+                        dependencyDetails.getPackageVersion().orElse("<missing>")));
+                if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
+                    createBdioComponent(dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
+                }
             }
         }
     }

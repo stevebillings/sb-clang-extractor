@@ -24,6 +24,7 @@
 package com.blackducksoftware.integration.hub.clang.pkgmgr;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -42,28 +43,13 @@ import com.blackducksoftware.integration.hub.imageinspector.lib.OperatingSystemE
 @Component
 public class Dpkg implements PkgMgr {
 
-    private static final String DPKG_VERSION_COMMAND = "dpkg --version";
+    private static final String PKG_MGR_NAME = "dpkg";
+    private static final String VERSION_COMMAND = "dpkg --version";
+    private static final String EXPECTED_TEXT = "package management program version";
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final List<Forge> forges = Arrays.asList(OperatingSystemEnum.UBUNTU.getForge(), OperatingSystemEnum.DEBIAN.getForge());
-
-    @Override
-    public boolean applies() {
-        try {
-            final String versionOutput = SimpleExecutor.execute(new File("."), null, DPKG_VERSION_COMMAND);
-            logger.trace(String.format("packageStatusOutput: %s", versionOutput));
-            if (versionOutput.contains("package management program version")) {
-                logger.info("Found package manager dpkg");
-                return true;
-            }
-            logger.debug(String.format("Output of %s does not look right; concluding that the dpkg package manager is not present. The output: %s", DPKG_VERSION_COMMAND, versionOutput));
-        } catch (ExecutableRunnerException | IntegrationException e) {
-            logger.debug(String.format("Error executing %s; concluding that the dpkg package manager is not present. The error: %s", DPKG_VERSION_COMMAND, e.getMessage()));
-            return false;
-        }
-        return false;
-    }
 
     @Override
     public Forge getDefaultForge() {
@@ -76,12 +62,51 @@ public class Dpkg implements PkgMgr {
     }
 
     @Override
-    public DependencyDetails getDependencyDetails(final File dependencyFile) {
+    public String getPkgMgrName() {
+        return PKG_MGR_NAME;
+    }
+
+    @Override
+    public String getCheckPresenceCommand() {
+        return VERSION_COMMAND;
+    }
+
+    @Override
+    public String getCheckPresenceCommandOutputExpectedText() {
+        return EXPECTED_TEXT;
+    }
+
+    @Override
+    public Logger getLogger() {
+        return logger;
+    }
+
+    @Override
+    public List<DependencyDetails> getDependencyDetails(final File dependencyFile) {
+        final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
+        // what about case where it finds nothing??
         final Optional<String[]> packageNameArch = getPackageNameArch(dependencyFile);
         final Optional<String> packageName = getPackageName(packageNameArch);
         final Optional<String> packageArch = getPackageArch(packageNameArch);
         final Optional<String> packageVersion = getPackageVersion(packageName);
-        return new DependencyDetails(packageName, packageVersion, packageArch);
+        final DependencyDetails dependencyDetails = new DependencyDetails(packageName, packageVersion, packageArch);
+
+        dependencyDetailsList.add(dependencyDetails);
+        return dependencyDetailsList;
+    }
+
+    private Optional<String[]> getPackageNameArch(final File dependencyFile) {
+        final String getPackageCommand = String.format("dpkg -S %s", dependencyFile.getAbsolutePath());
+        try {
+            final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
+            logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
+            final String[] queryPackageOutputParts = queryPackageOutput.split("\\s+");
+            final String[] packageNameArchParts = queryPackageOutputParts[0].split(":");
+            return Optional.of(packageNameArchParts);
+        } catch (ExecutableRunnerException | IntegrationException e) {
+            logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
+            return Optional.empty();
+        }
     }
 
     private Optional<String> getPackageVersion(final Optional<String> packageName) {
@@ -114,20 +139,6 @@ public class Dpkg implements PkgMgr {
             }
         }
         return Optional.empty();
-    }
-
-    private Optional<String[]> getPackageNameArch(final File dependencyFile) {
-        final String getPackageCommand = String.format("dpkg -S %s", dependencyFile.getAbsolutePath());
-        try {
-            final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
-            logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
-            final String[] queryPackageOutputParts = queryPackageOutput.split("\\s+");
-            final String[] packageNameArchParts = queryPackageOutputParts[0].split(":");
-            return Optional.of(packageNameArchParts);
-        } catch (ExecutableRunnerException | IntegrationException e) {
-            logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
-            return Optional.empty();
-        }
     }
 
     private Optional<String> getPackageName(final Optional<String[]> packageNameArch) {

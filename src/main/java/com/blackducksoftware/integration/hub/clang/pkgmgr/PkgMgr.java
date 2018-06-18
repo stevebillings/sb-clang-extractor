@@ -26,16 +26,43 @@ package com.blackducksoftware.integration.hub.clang.pkgmgr;
 import java.io.File;
 import java.util.List;
 
+import org.slf4j.Logger;
+
+import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
+import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
 public interface PkgMgr {
 
-    boolean applies();
+    default boolean applies() {
+        try {
+            final String versionOutput = SimpleExecutor.execute(new File("."), null, getCheckPresenceCommand());
+            getLogger().trace(String.format("packageStatusOutput: %s", versionOutput));
+            if (versionOutput.contains(getCheckPresenceCommandOutputExpectedText())) {
+                getLogger().info(String.format("Found package manager %s", getPkgMgrName()));
+                return true;
+            }
+            getLogger().debug(String.format("Output of %s does not look right; concluding that the dpkg package manager is not present. The output: %s", getCheckPresenceCommand(), versionOutput));
+        } catch (ExecutableRunnerException | IntegrationException e) {
+            getLogger().debug(String.format("Error executing %s; concluding that the dpkg package manager is not present. The error: %s", getCheckPresenceCommand(), e.getMessage()));
+            return false;
+        }
+        return false;
+    }
+
+    String getPkgMgrName();
 
     Forge getDefaultForge();
 
     List<Forge> getForges();
 
-    DependencyDetails getDependencyDetails(File dependencyFile);
+    List<DependencyDetails> getDependencyDetails(File dependencyFile);
+
+    String getCheckPresenceCommand();
+
+    String getCheckPresenceCommandOutputExpectedText();
+
+    Logger getLogger();
 }
