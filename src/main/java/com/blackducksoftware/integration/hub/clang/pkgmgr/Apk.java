@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -40,14 +41,21 @@ import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
 @Component
-public class Rpm implements PkgMgr {
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
-    private static final String PKG_MGR_NAME = "rpm";
-    private static final String VERSION_COMMAND = "rpm --version";
-    private static final String EXPECTED_TEXT = "RPM version";
-    private static final String QUERY_DEPENDENCY_FILE_COMMAND_PATTERN = "rpm -qf %s";
+public class Apk implements PkgMgr {
+    private static final String PKG_MGR_NAME = "apk";
+    private static final String VERSION_COMMAND = "apk --version";
+    private static final String EXPECTED_TEXT = "apk-tools ";
+    private static final String QUERY_ARCH_COMMAND = "apk info --print-arch";
+    private static final String QUERY_DEPENDENCY_FILE_COMMAND_PATTERN = "apk info --who-owns %s";
 
-    private final List<Forge> forges = Arrays.asList(Forge.CENTOS, Forge.FEDORA, Forge.REDHAT);
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    private final List<Forge> forges = Arrays.asList(Forge.ALPINE);
+
+    @Override
+    public String getPkgMgrName() {
+        return PKG_MGR_NAME;
+    }
 
     @Override
     public Forge getDefaultForge() {
@@ -64,6 +72,8 @@ public class Rpm implements PkgMgr {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
         try {
+            final String architecture = executor.execute(new File("."), null, QUERY_ARCH_COMMAND).trim();
+            logger.debug(String.format("architecture: %s", architecture));
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] packageLines = queryPackageOutput.split("\n");
@@ -72,26 +82,39 @@ public class Rpm implements PkgMgr {
                     logger.debug(String.format("Skipping line: %s", packageLine));
                     continue;
                 }
-                final int lastDotIndex = packageLine.lastIndexOf('.');
-                final String arch = packageLine.substring(lastDotIndex + 1);
-                final int lastDashIndex = packageLine.lastIndexOf('-');
-                final String nameVersion = packageLine.substring(0, lastDashIndex);
-                final int secondToLastDashIndex = nameVersion.lastIndexOf('-');
-                final String versionRelease = packageLine.substring(secondToLastDashIndex + 1, lastDotIndex);
-                final String artifact = packageLine.substring(0, secondToLastDashIndex);
-                final DependencyDetails dependencyDetails = new DependencyDetails(Optional.ofNullable(artifact), Optional.ofNullable(versionRelease), Optional.ofNullable(arch));
-                dependencyDetailsList.add(dependencyDetails);
+                final String[] packageLineParts = packageLine.split("\\s+");
+                final String packageNameAndVersion = packageLineParts[4];
+                logger.trace(String.format("packageNameAndVersion: %s", packageNameAndVersion));
+                final String[] parts = packageNameAndVersion.split("-");
+                if (parts.length < 3) {
+                    logger.error(String.format("apk info output contains an invalid package: %s", packageNameAndVersion));
+                    continue;
+                }
+                final String version = String.format("%s-%s", parts[parts.length - 2], parts[parts.length - 1]);
+                logger.trace(String.format("version: %s", version));
+                String component = "";
+                for (int i = 0; i < parts.length - 2; i++) {
+                    final String part = parts[i];
+                    if (StringUtils.isNotBlank(component)) {
+                        component += String.format("-%s", part);
+                    } else {
+                        component = part;
+                    }
+                }
+                logger.trace(String.format("component: %s", component));
+                // if a package starts with a period, we should ignore it because it is a virtual meta package and the version information is missing
+                if (!component.startsWith(".")) {
+                    final String externalId = String.format("%s/%s/%s", component, version, architecture);
+                    logger.debug(String.format("Constructed externalId: %s", externalId));
+                    final DependencyDetails dependencyDetails = new DependencyDetails(Optional.ofNullable(component), Optional.ofNullable(version), Optional.ofNullable(architecture));
+                    dependencyDetailsList.add(dependencyDetails);
+                }
             }
             return dependencyDetailsList;
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
             return dependencyDetailsList;
         }
-    }
-
-    @Override
-    public String getPkgMgrName() {
-        return PKG_MGR_NAME;
     }
 
     @Override
@@ -110,7 +133,6 @@ public class Rpm implements PkgMgr {
     }
 
     private boolean valid(final String packageLine) {
-        return packageLine.matches(".+-.+-.+\\..*");
+        return packageLine.contains(" is owned by ");
     }
-
 }
