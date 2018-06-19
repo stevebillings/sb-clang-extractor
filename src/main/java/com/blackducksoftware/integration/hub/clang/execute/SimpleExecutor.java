@@ -31,6 +31,7 @@ import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.Executable;
@@ -38,10 +39,12 @@ import com.blackducksoftware.integration.hub.clang.execute.fromdetect.Executable
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunner;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
-public class SimpleExecutor {
+@Component
+public class SimpleExecutor implements Executor {
     private static final Logger logger = LoggerFactory.getLogger(SimpleExecutor.class);
 
-    public static String execute(final File workingDir, Map<String, String> environmentVariables, final String cmd) throws ExecutableRunnerException, IntegrationException {
+    @Override
+    public String execute(final File workingDir, Map<String, String> environmentVariables, final String cmd) throws ExecutableRunnerException, IntegrationException {
         logger.info(String.format("Executing %s in %s", cmd, workingDir));
         final String newPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
         if (environmentVariables == null) {

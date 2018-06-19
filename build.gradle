@@ -47,5 +47,7 @@ dependencies {
     compile("org.springframework.boot:spring-boot:2.0.3.RELEASE")
     compile("org.springframework.boot:spring-boot-autoconfigure:2.0.3.RELEASE")
     compile("org.springframework.boot:spring-boot-starter")
+    testCompile group: 'org.mockito', name: 'mockito-all', version: '2.0.2-beta'
+    testCompile 'org.springframework.boot:spring-boot-starter-test'
 }
 

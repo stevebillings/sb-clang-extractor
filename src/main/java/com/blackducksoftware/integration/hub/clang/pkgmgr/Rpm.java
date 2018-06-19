@@ -36,7 +36,7 @@ import org.springframework.stereotype.Component;
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
-import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
 @Component
@@ -59,11 +59,11 @@ public class Rpm implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final File dependencyFile) {
+    public List<DependencyDetails> getDependencyDetails(final Executor executor, final File dependencyFile) {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format("rpm -qf %s", dependencyFile.getAbsolutePath());
         try {
-            final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
+            final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] packageLines = queryPackageOutput.split("\n");
             for (final String packageLine : packageLines) {

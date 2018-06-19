@@ -36,7 +36,7 @@ import org.springframework.stereotype.Component;
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
-import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
 @Component
@@ -82,13 +82,13 @@ public class Dpkg implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final File dependencyFile) {
+    public List<DependencyDetails> getDependencyDetails(final Executor executor, final File dependencyFile) {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
         try {
-            final String queryPackageOutput = SimpleExecutor.execute(new File("."), null, getPackageCommand);
+            final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
-            addToPackageList(dependencyDetailsList, queryPackageOutput);
+            addToPackageList(executor, dependencyDetailsList, queryPackageOutput);
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
 
@@ -96,7 +96,7 @@ public class Dpkg implements PkgMgr {
         return dependencyDetailsList;
     }
 
-    private void addToPackageList(final List<DependencyDetails> dependencyDetailsList, final String queryPackageOutput) {
+    private void addToPackageList(final Executor executor, final List<DependencyDetails> dependencyDetailsList, final String queryPackageOutput) {
         final String[] packageLines = queryPackageOutput.split("\n");
         for (final String packageLine : packageLines) {
             if (!valid(packageLine)) {
@@ -108,7 +108,7 @@ public class Dpkg implements PkgMgr {
             final String packageName = packageNameArchParts[0];
             final String packageArch = packageNameArchParts[1];
             logger.debug(String.format("package name: %s; arch: %s", packageName, packageArch));
-            final Optional<String> packageVersion = getPackageVersion(packageName);
+            final Optional<String> packageVersion = getPackageVersion(executor, packageName);
             final DependencyDetails dependencyDetails = new DependencyDetails(Optional.of(packageName), packageVersion, Optional.of(packageArch));
             dependencyDetailsList.add(dependencyDetails);
         }
@@ -121,11 +121,11 @@ public class Dpkg implements PkgMgr {
         return false;
     }
 
-    private Optional<String> getPackageVersion(final String packageName) {
+    private Optional<String> getPackageVersion(final Executor executor, final String packageName) {
 
         final String getPackageVersionCommand = String.format("dpkg -s %s", packageName);
         try {
-            final String packageStatusOutput = SimpleExecutor.execute(new File("."), null, getPackageVersionCommand);
+            final String packageStatusOutput = executor.execute(new File("."), null, getPackageVersionCommand);
             logger.info(String.format("packageStatusOutput: %s", packageStatusOutput));
             final Optional<String> packageVersion = getPackageVersionFromStatusOutput(packageName, packageStatusOutput);
             return packageVersion;

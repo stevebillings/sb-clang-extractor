@@ -30,8 +30,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import javax.annotation.PostConstruct;
-
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +43,7 @@ import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
 import com.blackducksoftware.integration.hub.bdio.model.dependency.Dependency;
 import com.blackducksoftware.integration.hub.bdio.model.externalid.ExternalId;
-import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 import com.blackducksoftware.integration.hub.clang.pkgmgr.PkgMgr;
 import com.google.gson.Gson;
@@ -55,24 +53,24 @@ public class ClangExtractor {
     private static final String COMPILE_COMMANDS_JSON_FILENAME = "compile_commands.json";
     private static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
-    private PkgMgr pkgMgr = null;
 
     @Autowired
     private List<PkgMgr> pkgMgrs;
 
-    @PostConstruct
-    public void init() throws IntegrationException {
-        for (final PkgMgr pkgMgr : pkgMgrs) {
-            if (pkgMgr.applies()) {
-                this.pkgMgr = pkgMgr;
-                return;
+    public SimpleBdioDocument extract(final Executor executor, final String buildDirPath, final String workingDirPath, final String codeLocationName, final String projectName, final String projectVersion)
+            throws IOException, ExecutableRunnerException, IntegrationException {
+        logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
+        PkgMgr pkgMgr = null;
+        for (final PkgMgr pkgMgrCandidate : pkgMgrs) {
+            if (pkgMgrCandidate.applies(executor)) {
+                pkgMgr = pkgMgrCandidate;
+                break;
             }
         }
-        throw new IntegrationException("Unable to execute any supported package manager; Please make sure that one of the supported package managers is on the PATH");
-    }
-
-    public SimpleBdioDocument extract(final String buildDirPath, final String codeLocationName, final String projectName, final String projectVersion) throws IOException, ExecutableRunnerException, IntegrationException {
-        logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
+        if (pkgMgr == null) {
+            throw new IntegrationException("Unable to execute any supported package manager; Please make sure that one of the supported package managers is on the PATH");
+        }
+        final File workingDir = new File(workingDirPath);
         final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(pkgMgr.getDefaultForge(), projectName, projectVersion);
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
@@ -83,36 +81,38 @@ public class ClangExtractor {
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-            processCompileCommand(dependencyGraph, compileCommand);
+            processCompileCommand(executor, pkgMgr, workingDir, dependencyGraph, compileCommand);
         }
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return bdioDocument;
     }
 
-    private void processCompileCommand(final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) throws ExecutableRunnerException, IOException, IntegrationException {
-        final File depsMkFile = new File(DEPS_MK_PATH);
+    private void processCompileCommand(final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand)
+            throws ExecutableRunnerException, IOException, IntegrationException {
+
+        final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
         final String generateDependenciesFileCommand = String.format("%s -M -MF %s", compileCommand.command, depsMkFile.getAbsolutePath());
-        SimpleExecutor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
+        executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
 
         final List<String> dependencyFilePaths = getDependencyFilePaths(depsMkFile);
         final List<File> dependencyFiles = getDependencyFiles(dependencyFilePaths);
-        getPackages(dependencyGraph, dependencyFiles);
+        getPackages(executor, pkgMgr, dependencyGraph, dependencyFiles);
     }
 
-    private void getPackages(final MutableDependencyGraph dependencyGraph, final List<File> dependencyFiles) {
+    private void getPackages(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final List<File> dependencyFiles) {
         for (final File dependencyFile : dependencyFiles) {
-            final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(dependencyFile);
+            final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(executor, dependencyFile);
             for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
                 logger.info(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
                         dependencyDetails.getPackageVersion().orElse("<missing>")));
                 if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
-                    createBdioComponent(dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
+                    createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
                 }
             }
         }
     }
 
-    private void createBdioComponent(final MutableDependencyGraph dependencies, final String name, final String version, final String arch) {
+    private void createBdioComponent(final PkgMgr pkgMgr, final MutableDependencyGraph dependencies, final String name, final String version, final String arch) {
         final String externalId = String.format("%s/%s/%s", name, version, arch);
         logger.trace(String.format("Constructed externalId: %s", externalId));
         for (final Forge forge : pkgMgr.getForges()) {

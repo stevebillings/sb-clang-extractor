@@ -24,6 +24,7 @@
 package com.blackducksoftware.integration.hub.clang.pkgmgr;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -31,15 +32,15 @@ import org.slf4j.Logger;
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
-import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
 public interface PkgMgr {
 
-    default boolean applies() {
+    default boolean applies(final Executor executor) {
         try {
-            final String versionOutput = SimpleExecutor.execute(new File("."), null, getCheckPresenceCommand());
-            getLogger().trace(String.format("packageStatusOutput: %s", versionOutput));
+            final String versionOutput = executor.execute(new File("."), new HashMap<String, String>(), getCheckPresenceCommand());
+            getLogger().info(String.format("*** packageStatusOutput: %s", versionOutput));
             if (versionOutput.contains(getCheckPresenceCommandOutputExpectedText())) {
                 getLogger().info(String.format("Found package manager %s", getPkgMgrName()));
                 return true;
@@ -58,7 +59,7 @@ public interface PkgMgr {
 
     List<Forge> getForges();
 
-    List<DependencyDetails> getDependencyDetails(File dependencyFile);
+    List<DependencyDetails> getDependencyDetails(Executor executor, File dependencyFile);
 
     String getCheckPresenceCommand();
 

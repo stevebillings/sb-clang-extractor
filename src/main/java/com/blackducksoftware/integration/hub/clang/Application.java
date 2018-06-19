@@ -40,6 +40,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import com.blackducksoftware.integration.hub.bdio.BdioWriter;
 import com.blackducksoftware.integration.hub.bdio.SimpleBdioFactory;
 import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
+import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
 import com.google.gson.Gson;
 
 @SpringBootApplication
@@ -50,7 +51,10 @@ public class Application {
     private ClangExtractor clangExtractor;
 
     @Value("${build.dir:.}")
-    private String buildDir;
+    private String buildDirPath;
+
+    @Value("${working.dir:.}")
+    private String workingDirPath;
 
     @Value("${code.location.name:ClangExtractorCodeLocation}")
     private String codeLocationName;
@@ -68,7 +72,7 @@ public class Application {
     @PostConstruct
     public void run() {
         try {
-            final SimpleBdioDocument bdioDocument = clangExtractor.extract(buildDir, codeLocationName, projectName, projectVersion);
+            final SimpleBdioDocument bdioDocument = clangExtractor.extract(new SimpleExecutor(), buildDirPath, workingDirPath, codeLocationName, projectName, projectVersion);
             logger.info(String.format("Generated BDIO document BOM spdxName: %s", bdioDocument.billOfMaterials.spdxName));
             writeBdioToFile(bdioDocument, new File("clangExtractor.jsonld"));
         } catch (final Exception e) {
