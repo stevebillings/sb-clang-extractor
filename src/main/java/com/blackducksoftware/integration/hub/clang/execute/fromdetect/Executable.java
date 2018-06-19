@@ -52,7 +52,7 @@ public class Executable {
     }
 
     public ProcessBuilder createProcessBuilder() {
-        logger.info("createProcessBuilder()");
+        logger.debug("createProcessBuilder()");
         final String[] cmdArgArray = cmd.split("\\s+");
         final List<String> processBuilderArguments = Arrays.asList(cmdArgArray);
         final ProcessBuilder processBuilder = new ProcessBuilder(processBuilderArguments);

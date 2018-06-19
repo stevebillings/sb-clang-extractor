@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,14 +88,24 @@ public class ClangExtractor {
         return bdioDocument;
     }
 
-    private void processCompileCommand(final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand)
-            throws ExecutableRunnerException, IOException, IntegrationException {
+    private void processCompileCommand(final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) {
 
         final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
         final String generateDependenciesFileCommand = String.format("%s -M -MF %s", compileCommand.command, depsMkFile.getAbsolutePath());
-        executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
+        try {
+            executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
+        } catch (ExecutableRunnerException | IntegrationException e) {
+            logger.warn(String.format("Error compiling with command '%s': %s", generateDependenciesFileCommand, e.getMessage()));
+            return;
+        }
 
-        final List<String> dependencyFilePaths = getDependencyFilePaths(depsMkFile);
+        List<String> dependencyFilePaths;
+        try {
+            dependencyFilePaths = getDependencyFilePaths(depsMkFile);
+        } catch (final IOException e) {
+            logger.warn(String.format("Error getting dependency file paths for '%s': %s", compileCommand.toString(), e.getMessage()));
+            return;
+        }
         final List<File> dependencyFiles = getDependencyFiles(dependencyFilePaths);
         getPackages(executor, pkgMgr, dependencyGraph, dependencyFiles);
     }
@@ -103,7 +114,7 @@ public class ClangExtractor {
         for (final File dependencyFile : dependencyFiles) {
             final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(executor, dependencyFile);
             for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
-                logger.info(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
+                logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
                         dependencyDetails.getPackageVersion().orElse("<missing>")));
                 if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
                     createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
@@ -118,7 +129,7 @@ public class ClangExtractor {
         for (final Forge forge : pkgMgr.getForges()) {
             final ExternalId extId = new SimpleBdioFactory().createArchitectureExternalId(forge, name, version, arch);
             final Dependency dep = new SimpleBdioFactory().createDependency(name, version, extId); // createDependencyNode(forge, name, version, arch);
-            logger.info(String.format("*** forge: %s: adding %s version %s as child to dependency node tree; externalId: %s", forge.getName(), dep.name, dep.version, dep.externalId.createBdioId()));
+            logger.info(String.format("forge: %s: adding %s version %s as child to dependency node tree; externalId: %s", forge.getName(), dep.name, dep.version, dep.externalId.createBdioId()));
             dependencies.addChildToRoot(dep);
         }
     }
@@ -127,17 +138,17 @@ public class ClangExtractor {
         final String depsDecl = FileUtils.readFileToString(depsMkFile, StandardCharsets.UTF_8);
         final String[] depsDeclParts = depsDecl.split(": ");
         String depsListString = depsDeclParts[1];
-        logger.info(String.format("dependencies: %s", depsListString));
+        logger.debug(String.format("dependencies: %s", depsListString));
 
         depsListString = depsListString.replaceAll("\n", " ");
-        logger.info(String.format("dependencies, newlines removed: %s", depsListString));
+        logger.trace(String.format("dependencies, newlines removed: %s", depsListString));
 
         depsListString = depsListString.replaceAll("\\\\", " ");
-        logger.info(String.format("dependencies, backslashes removed: %s", depsListString));
+        logger.trace(String.format("dependencies, backslashes removed: %s", depsListString));
 
         final String[] deps = depsListString.split("\\s+");
         for (final String includeFile : deps) {
-            logger.info(String.format("\t%s", includeFile));
+            logger.debug(String.format("\t%s", includeFile));
         }
         return Arrays.asList(deps);
     }
@@ -145,11 +156,15 @@ public class ClangExtractor {
     private List<File> getDependencyFiles(final List<String> dependencies) {
         final List<File> dependencyFiles = new ArrayList<>(dependencies.size());
         for (final String dependency : dependencies) {
+            if (StringUtils.isBlank(dependency)) {
+                continue;
+            }
+            logger.debug(String.format("Expanding dependency %s to full path", dependency));
             final File dependencyFile = new File(dependency);
             if (!dependencyFile.exists()) {
-                logger.error(String.format("%s does not exist", dependencyFile.getAbsolutePath()));
+                logger.error(String.format("Dependency file %s does not exist", dependencyFile.getAbsolutePath()));
             } else {
-                logger.info(String.format("Happily, %s exists", dependencyFile.getAbsolutePath()));
+                logger.debug(String.format("Dependency file %s does exist", dependencyFile.getAbsolutePath()));
                 dependencyFiles.add(dependencyFile);
             }
         }

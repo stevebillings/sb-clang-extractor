@@ -35,7 +35,7 @@ public class ExecutableRunner {
     private final Logger logger = LoggerFactory.getLogger(ExecutableRunner.class);
 
     public ExecutableOutput execute(final Executable executable) throws ExecutableRunnerException {
-        logger.info(String.format("Running executable: %s", executable.getDescription()));
+        logger.debug(String.format("Running executable: %s", executable.getDescription()));
         try {
             final ProcessBuilder processBuilder = executable.createProcessBuilder();
             final Process process = processBuilder.start();

@@ -27,4 +27,9 @@ public class CompileCommand {
     public String directory;
     public String command;
     public String file;
+
+    @Override
+    public String toString() {
+        return "CompileCommand [directory=" + directory + ", command=" + command + ", file=" + file + "]";
+    }
 }

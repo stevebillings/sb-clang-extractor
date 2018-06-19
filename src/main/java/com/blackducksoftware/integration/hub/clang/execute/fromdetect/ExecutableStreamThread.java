@@ -53,7 +53,7 @@ public class ExecutableStreamThread extends Thread {
             final String separator = System.lineSeparator();
             while ((line = bufferedReader.readLine()) != null) {
                 stringBuilder.append(line + separator);
-                logger.info(line);
+                logger.trace(line);
             }
         } catch (final IOException e) {
             // Ignore
@@ -63,7 +63,7 @@ public class ExecutableStreamThread extends Thread {
     }
 
     public String getExecutableOutput() {
-    		return executableOutput;
+        return executableOutput;
     }
 
 }
