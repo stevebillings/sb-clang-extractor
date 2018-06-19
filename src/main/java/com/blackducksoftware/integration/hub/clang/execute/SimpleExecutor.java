@@ -45,7 +45,7 @@ public class SimpleExecutor implements Executor {
 
     @Override
     public String execute(final File workingDir, Map<String, String> environmentVariables, final String cmd) throws ExecutableRunnerException, IntegrationException {
-        logger.info(String.format("Executing %s in %s", cmd, workingDir));
+        logger.debug(String.format("Executing %s in %s", cmd, workingDir));
         final String newPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
         if (environmentVariables == null) {
             environmentVariables = new HashMap<>();
@@ -53,7 +53,7 @@ public class SimpleExecutor implements Executor {
         String path = environmentVariables.get("PATH");
         path = path == null ? newPath : String.format("%s:%s", path, newPath);
         environmentVariables.put("PATH", path);
-        logger.info(String.format("Env: %s", environmentVariables));
+        logger.debug(String.format("Env: %s", environmentVariables));
         final Executable executor = new Executable(workingDir, environmentVariables, cmd);
         final ExecutableRunner runner = new ExecutableRunner();
         final ExecutableOutput out = runner.execute(executor);
