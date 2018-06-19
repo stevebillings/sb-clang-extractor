@@ -51,6 +51,7 @@ public class Apk implements PkgMgr {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final List<Forge> forges = Arrays.asList(Forge.ALPINE);
+    private String architecture = null;
 
     @Override
     public String getPkgMgrName() {
@@ -72,8 +73,10 @@ public class Apk implements PkgMgr {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
         try {
-            final String architecture = executor.execute(new File("."), null, QUERY_ARCH_COMMAND).trim();
-            logger.debug(String.format("architecture: %s", architecture));
+            if (architecture == null) {
+                architecture = executor.execute(new File("."), null, QUERY_ARCH_COMMAND).trim();
+                logger.debug(String.format("architecture: %s", architecture));
+            }
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
             logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] packageLines = queryPackageOutput.split("\n");
