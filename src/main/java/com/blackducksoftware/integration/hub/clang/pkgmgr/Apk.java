@@ -78,7 +78,7 @@ public class Apk implements PkgMgr {
                 logger.debug(String.format("architecture: %s", architecture));
             }
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
-            logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
+            logger.debug(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] packageLines = queryPackageOutput.split("\n");
             for (final String packageLine : packageLines) {
                 if (!valid(packageLine)) {

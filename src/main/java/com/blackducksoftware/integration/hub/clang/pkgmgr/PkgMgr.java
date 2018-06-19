@@ -40,7 +40,7 @@ public interface PkgMgr {
     default boolean applies(final Executor executor) {
         try {
             final String versionOutput = executor.execute(new File("."), new HashMap<String, String>(), getCheckPresenceCommand());
-            getLogger().info(String.format("*** packageStatusOutput: %s", versionOutput));
+            getLogger().debug(String.format("packageStatusOutput: %s", versionOutput));
             if (versionOutput.contains(getCheckPresenceCommandOutputExpectedText())) {
                 getLogger().info(String.format("Found package manager %s", getPkgMgrName()));
                 return true;

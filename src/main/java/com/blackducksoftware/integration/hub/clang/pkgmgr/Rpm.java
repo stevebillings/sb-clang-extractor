@@ -65,7 +65,7 @@ public class Rpm implements PkgMgr {
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
         try {
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
-            logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
+            logger.debug(String.format("queryPackageOutput: %s", queryPackageOutput));
             final String[] packageLines = queryPackageOutput.split("\n");
             for (final String packageLine : packageLines) {
                 if (!valid(packageLine)) {

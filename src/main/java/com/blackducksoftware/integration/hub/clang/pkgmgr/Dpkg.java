@@ -87,7 +87,7 @@ public class Dpkg implements PkgMgr {
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
         try {
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
-            logger.info(String.format("queryPackageOutput: %s", queryPackageOutput));
+            logger.debug(String.format("queryPackageOutput: %s", queryPackageOutput));
             addToPackageList(executor, dependencyDetailsList, queryPackageOutput);
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
@@ -100,7 +100,7 @@ public class Dpkg implements PkgMgr {
         final String[] packageLines = queryPackageOutput.split("\n");
         for (final String packageLine : packageLines) {
             if (!valid(packageLine)) {
-                logger.info(String.format("Skipping line: %s", packageLine));
+                logger.debug(String.format("Skipping line: %s", packageLine));
                 continue;
             }
             final String[] queryPackageOutputParts = packageLine.split("\\s+");
@@ -126,7 +126,7 @@ public class Dpkg implements PkgMgr {
         final String getPackageVersionCommand = String.format("dpkg -s %s", packageName);
         try {
             final String packageStatusOutput = executor.execute(new File("."), null, getPackageVersionCommand);
-            logger.info(String.format("packageStatusOutput: %s", packageStatusOutput));
+            logger.debug(String.format("packageStatusOutput: %s", packageStatusOutput));
             final Optional<String> packageVersion = getPackageVersionFromStatusOutput(packageName, packageStatusOutput);
             return packageVersion;
         } catch (ExecutableRunnerException | IntegrationException e) {
@@ -143,7 +143,7 @@ public class Dpkg implements PkgMgr {
             final String label = packageStatusOutputLineNameValue[0];
             final String value = packageStatusOutputLineNameValue[1];
             if ("Status".equals(label.trim()) && !value.contains("installed")) {
-                logger.info(String.format("%s is not installed; Status is: %s", packageName, value));
+                logger.debug(String.format("%s is not installed; Status is: %s", packageName, value));
                 return Optional.empty();
             }
             if ("Version".equals(label)) {
