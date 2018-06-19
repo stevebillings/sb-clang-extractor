@@ -23,7 +23,6 @@ import com.blackducksoftware.integration.hub.clang.execute.fromdetect.Executable
 @ContextConfiguration(classes = { AppConfig.class })
 public class ClangExtractorTest {
 
-    // @InjectMocks
     @Autowired
     private ClangExtractor extractor;
 
