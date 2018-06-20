@@ -104,7 +104,7 @@ public class ClangExtractor {
         try {
             executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
         } catch (ExecutableRunnerException | IntegrationException e) {
-            logger.warn(String.format("Error compiling with command '%s': %s", generateDependenciesFileCommand, e.getMessage()));
+            logger.debug(String.format("Error compiling with command '%s': %s", generateDependenciesFileCommand, e.getMessage()));
             return;
         }
 

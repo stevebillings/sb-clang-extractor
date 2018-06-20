@@ -90,7 +90,7 @@ public class Dpkg implements PkgMgr {
             logger.debug(String.format("queryPackageOutput: %s", queryPackageOutput));
             addToPackageList(executor, dependencyDetailsList, queryPackageOutput);
         } catch (ExecutableRunnerException | IntegrationException e) {
-            logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
+            logger.debug(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
 
         }
         return dependencyDetailsList;
