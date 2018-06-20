@@ -17,12 +17,12 @@ java -jar sb-clang-extractor-<version>.jar [ <options> ]
 
 Options:
 ```
---json.compilation.database.file # default: ./compile_commands.json
---working.dir # default: .
---output.bom.file # default: hub-bom-file.jsonld
---hub.code.location.name # default: ClangExtractorCodeLocation
---hub.project.name # default: ClangExtractorProject
---hub.project.version # default: default
+--json.compilation.database.file=<path to compile_commands.json file> # default: ./compile_commands.json
+--working.dir=<path to a dir to create intermediate files in> # default: .
+--output.bom.file=<path to output file> # default: hub-bom-file.jsonld
+--hub.code.location.name=<Hub code location name> # default: ClangExtractorCodeLocation
+--hub.project.name=<Hub project name> # default: ClangExtractorProject
+--hub.project.version=<Hub project version> # default: default
 ```
 
 
