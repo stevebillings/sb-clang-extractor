@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
+import com.blackducksoftware.integration.hub.clang.DependencyFile;
 import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
@@ -59,7 +60,7 @@ public interface PkgMgr {
 
     List<Forge> getForges();
 
-    List<DependencyDetails> getDependencyDetails(Executor executor, File dependencyFile);
+    List<DependencyDetails> getDependencyDetails(Executor executor, DependencyFile dependencyFile);
 
     String getCheckPresenceCommand();
 

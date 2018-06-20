@@ -54,7 +54,6 @@ import com.google.gson.Gson;
 @Component
 public class ClangExtractor {
     private static final String COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE = "%s -M -MF %s";
-    private static final String COMPILE_COMMANDS_JSON_FILENAME = "compile_commands.json";
     public static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final Set<File> processedDependencyFiles = new HashSet<>(200);
@@ -63,7 +62,8 @@ public class ClangExtractor {
     @Autowired
     private List<PkgMgr> pkgMgrs;
 
-    public SimpleBdioDocument extract(final Executor executor, final String compileCommandsJsonFilePath, final String workingDirPath, final String codeLocationName, final String projectName, final String projectVersion)
+    public SimpleBdioDocument extract(final File sourceDir, final Executor executor, final String compileCommandsJsonFilePath, final String workingDirPath, final String codeLocationName, final String projectName,
+            final String projectVersion)
             throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; compileCommandsJsonFilePath: %s", compileCommandsJsonFilePath));
         final PkgMgr pkgMgr = selectPkgMgr(executor);
@@ -77,7 +77,7 @@ public class ClangExtractor {
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-            processCompileCommand(executor, pkgMgr, workingDir, dependencyGraph, compileCommand);
+            processCompileCommand(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, compileCommand);
         }
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return bdioDocument;
@@ -97,7 +97,7 @@ public class ClangExtractor {
         return pkgMgr;
     }
 
-    private void processCompileCommand(final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) {
+    private void processCompileCommand(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) {
 
         final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
         final String generateDependenciesFileCommand = String.format(COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE, compileCommand.command, depsMkFile.getAbsolutePath());
@@ -115,12 +115,12 @@ public class ClangExtractor {
             logger.warn(String.format("Error getting dependency file paths for '%s': %s", compileCommand.toString(), e.getMessage()));
             return;
         }
-        final List<File> dependencyFiles = getDependencyFiles(dependencyFilePaths);
+        final List<DependencyFile> dependencyFiles = getDependencyFiles(sourceDir, dependencyFilePaths);
         getPackages(executor, pkgMgr, dependencyGraph, dependencyFiles);
     }
 
-    private void getPackages(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final List<File> dependencyFiles) {
-        for (final File dependencyFile : dependencyFiles) {
+    private void getPackages(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final List<DependencyFile> dependencyFiles) {
+        for (final DependencyFile dependencyFile : dependencyFiles) {
             final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(executor, dependencyFile);
             for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
                 logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
@@ -164,8 +164,8 @@ public class ClangExtractor {
         return Arrays.asList(deps);
     }
 
-    private List<File> getDependencyFiles(final List<String> dependencies) {
-        final List<File> dependencyFiles = new ArrayList<>(dependencies.size());
+    private List<DependencyFile> getDependencyFiles(final File sourceDir, final List<String> dependencies) {
+        final List<DependencyFile> dependencyFiles = new ArrayList<>(dependencies.size());
         for (final String dependency : dependencies) {
             if (StringUtils.isBlank(dependency)) {
                 continue;
@@ -178,10 +178,28 @@ public class ClangExtractor {
                 logger.debug(String.format("Dependency file %s does NOT exist", dependencyFile.getAbsolutePath()));
             } else {
                 logger.trace(String.format("Dependency file %s does exist", dependencyFile.getAbsolutePath()));
-                dependencyFiles.add(dependencyFile);
+                final DependencyFile dependencyFileWrapper = new DependencyFile(isUnder(sourceDir, dependencyFile) ? true : false, dependencyFile);
+                dependencyFiles.add(dependencyFileWrapper);
             }
         }
         return dependencyFiles;
+    }
+
+    private boolean isUnder(final File dir, final File file) {
+        logger.trace(String.format("Checking to see if file %s is under dir %s", file.getAbsolutePath(), dir.getAbsolutePath()));
+        try {
+            final String dirPath = dir.getCanonicalPath();
+            final String filePath = file.getCanonicalPath();
+            if (filePath.equals(dirPath) || filePath.startsWith(dirPath)) {
+                logger.trace("it is");
+                return true;
+            }
+            logger.trace("it is not");
+            return false;
+        } catch (final IOException e) {
+            logger.warn(String.format("Error getting canonical path for either %s or %s", dir.getAbsolutePath(), file.getAbsolutePath()));
+            return false;
+        }
     }
 
     private boolean dependencyFileAlreadyProcessed(final File dependencyFile) {

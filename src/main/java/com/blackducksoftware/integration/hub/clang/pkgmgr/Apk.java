@@ -37,6 +37,7 @@ import org.springframework.stereotype.Component;
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
 import com.blackducksoftware.integration.hub.clang.DependencyDetails;
+import com.blackducksoftware.integration.hub.clang.DependencyFile;
 import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
@@ -69,9 +70,9 @@ public class Apk implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final Executor executor, final File dependencyFile) {
+    public List<DependencyDetails> getDependencyDetails(final Executor executor, final DependencyFile dependencyFile) {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
-        final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getAbsolutePath());
+        final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getFile().getAbsolutePath());
         try {
             if (architecture == null) {
                 architecture = executor.execute(new File("."), null, QUERY_ARCH_COMMAND).trim();
@@ -116,6 +117,9 @@ public class Apk implements PkgMgr {
             return dependencyDetailsList;
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
+            if (!dependencyFile.isInBuildDir()) {
+                logger.info(String.format("*** %s should be scanned by iScan", dependencyFile.getFile().getAbsolutePath()));
+            }
             return dependencyDetailsList;
         }
     }

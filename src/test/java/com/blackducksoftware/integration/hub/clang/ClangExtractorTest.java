@@ -35,7 +35,8 @@ public class ClangExtractorTest {
     @Test
     public void test() throws IntegrationException, IOException, ExecutableRunnerException {
         final Executor executor = new MockExecutor();
-        final SimpleBdioDocument bdio = extractor.extract(executor, "src/test/resources/buildDir/compile_commands.json", "src/test/resources/buildDir", "testCodeLocationName", "testProjectName", "testProjectVersion");
+        final SimpleBdioDocument bdio = extractor.extract(new File("src/test/resources/buildDir"), executor, "src/test/resources/buildDir/compile_commands.json", "src/test/resources/buildDir", "testCodeLocationName", "testProjectName",
+                "testProjectVersion");
         assertEquals("testCodeLocationName", bdio.billOfMaterials.spdxName);
         boolean foundDebianComp = false;
         boolean foundUbuntuComp = false;

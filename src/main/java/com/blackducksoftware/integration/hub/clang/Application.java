@@ -52,6 +52,9 @@ public class Application {
     @Autowired
     private ClangExtractor clangExtractor;
 
+    @Value("${source.dir:.}")
+    private String sourceDirPath;
+
     @Value("${json.compilation.database.file:./compile_commands.json}")
     private String compileCommandsJsonFilePath;
 
@@ -78,12 +81,20 @@ public class Application {
     public void run() {
         try {
             prepareWorkingDir();
-            final SimpleBdioDocument bdioDocument = clangExtractor.extract(new SimpleExecutor(), compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion);
+            final SimpleBdioDocument bdioDocument = clangExtractor.extract(getSourceDir(), new SimpleExecutor(), compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion);
             logger.info(String.format("Generated BDIO document BOM spdxName: %s", bdioDocument.billOfMaterials.spdxName));
             writeBdioToFile(bdioDocument, new File(outputBomFilePath));
         } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);
         }
+    }
+
+    private File getSourceDir() throws IntegrationException {
+        final File sourceDir = new File(sourceDirPath);
+        if (!sourceDir.exists()) {
+            throw new IntegrationException(String.format("Source dir %s does not exist", sourceDir.getAbsolutePath()));
+        }
+        return sourceDir;
     }
 
     private void prepareWorkingDir() throws IntegrationException {
