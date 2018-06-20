@@ -30,6 +30,7 @@ import java.io.IOException;
 
 import javax.annotation.PostConstruct;
 
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 
+import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.BdioWriter;
 import com.blackducksoftware.integration.hub.bdio.SimpleBdioFactory;
 import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
@@ -50,19 +52,22 @@ public class Application {
     @Autowired
     private ClangExtractor clangExtractor;
 
-    @Value("${build.dir:.}")
-    private String buildDirPath;
+    @Value("${json.compilation.database.file:./compile_commands.json}")
+    private String compileCommandsJsonFilePath;
 
     @Value("${working.dir:.}")
     private String workingDirPath;
 
-    @Value("${code.location.name:ClangExtractorCodeLocation}")
+    @Value("${output.bom.file:hub-bom-file.jsonld}")
+    private String outputBomFilePath;
+
+    @Value("${hub.code.location.name:ClangExtractorCodeLocation}")
     private String codeLocationName;
 
-    @Value("${project.name:ClangExtractorProject}")
+    @Value("${hub.project.name:ClangExtractorProject}")
     private String projectName;
 
-    @Value("${project.version:default}")
+    @Value("${hub.project.version:default}")
     private String projectVersion;
 
     public static void main(final String[] args) {
@@ -72,12 +77,25 @@ public class Application {
     @PostConstruct
     public void run() {
         try {
-            final SimpleBdioDocument bdioDocument = clangExtractor.extract(new SimpleExecutor(), buildDirPath, workingDirPath, codeLocationName, projectName, projectVersion);
+            prepareWorkingDir();
+            final SimpleBdioDocument bdioDocument = clangExtractor.extract(new SimpleExecutor(), compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion);
             logger.info(String.format("Generated BDIO document BOM spdxName: %s", bdioDocument.billOfMaterials.spdxName));
-            writeBdioToFile(bdioDocument, new File("clangExtractor.jsonld"));
+            writeBdioToFile(bdioDocument, new File(outputBomFilePath));
         } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);
         }
+    }
+
+    private void prepareWorkingDir() throws IntegrationException {
+        final File workingDir = new File(this.workingDirPath);
+        final File depsFile = new File(workingDir, ClangExtractor.DEPS_MK_PATH);
+        FileUtils.deleteQuietly(depsFile);
+        try {
+            depsFile.createNewFile();
+        } catch (final IOException e) {
+            throw new IntegrationException(String.format("Error creating file in working dir %s; please make sure the directory exists. Error: %s", workingDirPath, e.getMessage()));
+        }
+        depsFile.delete();
     }
 
     private void writeBdioToFile(final SimpleBdioDocument bdioDocument, final File bdioOutputFile) throws IOException, FileNotFoundException {

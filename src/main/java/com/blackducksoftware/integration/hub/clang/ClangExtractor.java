@@ -53,8 +53,9 @@ import com.google.gson.Gson;
 
 @Component
 public class ClangExtractor {
+    private static final String COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE = "%s -M -MF %s";
     private static final String COMPILE_COMMANDS_JSON_FILENAME = "compile_commands.json";
-    private static final String DEPS_MK_PATH = "deps.mk";
+    public static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final Set<File> processedDependencyFiles = new HashSet<>(200);
     private final Set<DependencyDetails> processedDependencies = new HashSet<>(40);
@@ -62,16 +63,15 @@ public class ClangExtractor {
     @Autowired
     private List<PkgMgr> pkgMgrs;
 
-    public SimpleBdioDocument extract(final Executor executor, final String buildDirPath, final String workingDirPath, final String codeLocationName, final String projectName, final String projectVersion)
+    public SimpleBdioDocument extract(final Executor executor, final String compileCommandsJsonFilePath, final String workingDirPath, final String codeLocationName, final String projectName, final String projectVersion)
             throws IOException, ExecutableRunnerException, IntegrationException {
-        logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
+        logger.debug(String.format("extract() called; compileCommandsJsonFilePath: %s", compileCommandsJsonFilePath));
         final PkgMgr pkgMgr = selectPkgMgr(executor);
         final File workingDir = new File(workingDirPath);
         final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(pkgMgr.getDefaultForge(), projectName, projectVersion);
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
-        final File buildDir = new File(buildDirPath);
-        final File compileCommandsJsonFile = new File(buildDir, COMPILE_COMMANDS_JSON_FILENAME);
+        final File compileCommandsJsonFile = new File(compileCommandsJsonFilePath);
         final String compileCommandsJson = FileUtils.readFileToString(compileCommandsJsonFile, StandardCharsets.UTF_8);
         final Gson gson = new Gson();
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
@@ -100,7 +100,7 @@ public class ClangExtractor {
     private void processCompileCommand(final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) {
 
         final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
-        final String generateDependenciesFileCommand = String.format("%s -M -MF %s", compileCommand.command, depsMkFile.getAbsolutePath());
+        final String generateDependenciesFileCommand = String.format(COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE, compileCommand.command, depsMkFile.getAbsolutePath());
         try {
             executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
         } catch (ExecutableRunnerException | IntegrationException e) {
@@ -126,7 +126,7 @@ public class ClangExtractor {
                 logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
                         dependencyDetails.getPackageVersion().orElse("<missing>")));
                 if (dependencyAlreadyProcessed(dependencyDetails)) {
-                    logger.trace(String.format("*** dependency %s has already been processed", dependencyDetails.toString()));
+                    logger.trace(String.format("dependency %s has already been processed", dependencyDetails.toString()));
                 } else if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
                     createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
                 }
@@ -173,9 +173,9 @@ public class ClangExtractor {
             logger.trace(String.format("Expanding dependency %s to full path", dependency));
             final File dependencyFile = new File(dependency);
             if (dependencyFileAlreadyProcessed(dependencyFile)) {
-                logger.trace(String.format("*** Dependency file %s has already been processed", dependencyFile.getAbsolutePath()));
+                logger.trace(String.format("Dependency file %s has already been processed", dependencyFile.getAbsolutePath()));
             } else if (!dependencyFile.exists()) {
-                logger.error(String.format("Dependency file %s does NOT exist", dependencyFile.getAbsolutePath()));
+                logger.debug(String.format("Dependency file %s does NOT exist", dependencyFile.getAbsolutePath()));
             } else {
                 logger.trace(String.format("Dependency file %s does exist", dependencyFile.getAbsolutePath()));
                 dependencyFiles.add(dependencyFile);
