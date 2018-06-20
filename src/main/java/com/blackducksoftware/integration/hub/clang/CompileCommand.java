@@ -23,6 +23,9 @@
  */
 package com.blackducksoftware.integration.hub.clang;
 
+import org.apache.commons.lang3.builder.RecursiveToStringStyle;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+
 public class CompileCommand {
     public String directory;
     public String command;
@@ -30,6 +33,6 @@ public class CompileCommand {
 
     @Override
     public String toString() {
-        return "CompileCommand [directory=" + directory + ", command=" + command + ", file=" + file + "]";
+        return ReflectionToStringBuilder.toString(this, RecursiveToStringStyle.JSON_STYLE);
     }
 }

@@ -25,6 +25,9 @@ package com.blackducksoftware.integration.hub.clang;
 
 import java.util.Optional;
 
+import org.apache.commons.lang3.builder.RecursiveToStringStyle;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+
 public class DependencyDetails {
     private final Optional<String> packageName;
     private final Optional<String> packageVersion;
@@ -47,4 +50,56 @@ public class DependencyDetails {
     public Optional<String> getPackageArch() {
         return packageArch;
     }
+
+    @Override
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this, RecursiveToStringStyle.JSON_STYLE);
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + (packageArch == null ? 0 : packageArch.hashCode());
+        result = prime * result + (packageName == null ? 0 : packageName.hashCode());
+        result = prime * result + (packageVersion == null ? 0 : packageVersion.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(final Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        final DependencyDetails other = (DependencyDetails) obj;
+        if (packageArch == null) {
+            if (other.packageArch != null) {
+                return false;
+            }
+        } else if (!packageArch.equals(other.packageArch)) {
+            return false;
+        }
+        if (packageName == null) {
+            if (other.packageName != null) {
+                return false;
+            }
+        } else if (!packageName.equals(other.packageName)) {
+            return false;
+        }
+        if (packageVersion == null) {
+            if (other.packageVersion != null) {
+                return false;
+            }
+        } else if (!packageVersion.equals(other.packageVersion)) {
+            return false;
+        }
+        return true;
+    }
+
 }

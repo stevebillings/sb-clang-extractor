@@ -28,7 +28,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -54,6 +56,8 @@ public class ClangExtractor {
     private static final String COMPILE_COMMANDS_JSON_FILENAME = "compile_commands.json";
     private static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private final Set<File> processedDependencyFiles = new HashSet<>(200);
+    private final Set<DependencyDetails> processedDependencies = new HashSet<>(40);
 
     @Autowired
     private List<PkgMgr> pkgMgrs;
@@ -61,16 +65,7 @@ public class ClangExtractor {
     public SimpleBdioDocument extract(final Executor executor, final String buildDirPath, final String workingDirPath, final String codeLocationName, final String projectName, final String projectVersion)
             throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; buildDirPath: %s", buildDirPath));
-        PkgMgr pkgMgr = null;
-        for (final PkgMgr pkgMgrCandidate : pkgMgrs) {
-            if (pkgMgrCandidate.applies(executor)) {
-                pkgMgr = pkgMgrCandidate;
-                break;
-            }
-        }
-        if (pkgMgr == null) {
-            throw new IntegrationException("Unable to execute any supported package manager; Please make sure that one of the supported package managers is on the PATH");
-        }
+        final PkgMgr pkgMgr = selectPkgMgr(executor);
         final File workingDir = new File(workingDirPath);
         final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(pkgMgr.getDefaultForge(), projectName, projectVersion);
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
@@ -86,6 +81,20 @@ public class ClangExtractor {
         }
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return bdioDocument;
+    }
+
+    private PkgMgr selectPkgMgr(final Executor executor) throws IntegrationException {
+        PkgMgr pkgMgr = null;
+        for (final PkgMgr pkgMgrCandidate : pkgMgrs) {
+            if (pkgMgrCandidate.applies(executor)) {
+                pkgMgr = pkgMgrCandidate;
+                break;
+            }
+        }
+        if (pkgMgr == null) {
+            throw new IntegrationException("Unable to execute any supported package manager; Please make sure that one of the supported package managers is on the PATH");
+        }
+        return pkgMgr;
     }
 
     private void processCompileCommand(final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) {
@@ -116,7 +125,9 @@ public class ClangExtractor {
             for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
                 logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
                         dependencyDetails.getPackageVersion().orElse("<missing>")));
-                if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
+                if (dependencyAlreadyProcessed(dependencyDetails)) {
+                    logger.trace(String.format("*** dependency %s has already been processed", dependencyDetails.toString()));
+                } else if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
                     createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
                 }
             }
@@ -138,7 +149,7 @@ public class ClangExtractor {
         final String depsDecl = FileUtils.readFileToString(depsMkFile, StandardCharsets.UTF_8);
         final String[] depsDeclParts = depsDecl.split(": ");
         String depsListString = depsDeclParts[1];
-        logger.debug(String.format("dependencies: %s", depsListString));
+        logger.trace(String.format("dependencies: %s", depsListString));
 
         depsListString = depsListString.replaceAll("\n", " ");
         logger.trace(String.format("dependencies, newlines removed: %s", depsListString));
@@ -148,7 +159,7 @@ public class ClangExtractor {
 
         final String[] deps = depsListString.split("\\s+");
         for (final String includeFile : deps) {
-            logger.debug(String.format("\t%s", includeFile));
+            logger.trace(String.format("\t%s", includeFile));
         }
         return Arrays.asList(deps);
     }
@@ -159,15 +170,33 @@ public class ClangExtractor {
             if (StringUtils.isBlank(dependency)) {
                 continue;
             }
-            logger.debug(String.format("Expanding dependency %s to full path", dependency));
+            logger.trace(String.format("Expanding dependency %s to full path", dependency));
             final File dependencyFile = new File(dependency);
-            if (!dependencyFile.exists()) {
-                logger.error(String.format("Dependency file %s does not exist", dependencyFile.getAbsolutePath()));
+            if (dependencyFileAlreadyProcessed(dependencyFile)) {
+                logger.trace(String.format("*** Dependency file %s has already been processed", dependencyFile.getAbsolutePath()));
+            } else if (!dependencyFile.exists()) {
+                logger.error(String.format("Dependency file %s does NOT exist", dependencyFile.getAbsolutePath()));
             } else {
-                logger.debug(String.format("Dependency file %s does exist", dependencyFile.getAbsolutePath()));
+                logger.trace(String.format("Dependency file %s does exist", dependencyFile.getAbsolutePath()));
                 dependencyFiles.add(dependencyFile);
             }
         }
         return dependencyFiles;
+    }
+
+    private boolean dependencyFileAlreadyProcessed(final File dependencyFile) {
+        if (processedDependencyFiles.contains(dependencyFile)) {
+            return true;
+        }
+        processedDependencyFiles.add(dependencyFile);
+        return false;
+    }
+
+    private boolean dependencyAlreadyProcessed(final DependencyDetails dependency) {
+        if (processedDependencies.contains(dependency)) {
+            return true;
+        }
+        processedDependencies.add(dependency);
+        return false;
     }
 }
