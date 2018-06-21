@@ -46,6 +46,7 @@ public class ClangExtractorTest {
         assertEquals("testCodeLocationName", bdio.billOfMaterials.spdxName);
         assertEquals(1, filesForIScan.size());
         assertEquals("/tmp/notinstalledbypkgmgr.h", filesForIScan.iterator().next().getAbsolutePath());
+        assertEquals(2, bdio.components.size());
         boolean foundDebianComp = false;
         boolean foundUbuntuComp = false;
         for (final BdioComponent comp : bdio.components) {
