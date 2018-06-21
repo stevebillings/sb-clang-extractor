@@ -63,7 +63,7 @@ public class ClangExtractor {
     private List<PkgMgr> pkgMgrs;
 
     public SimpleBdioDocument extract(final File sourceDir, final Executor executor, final String compileCommandsJsonFilePath, final String workingDirPath, final String codeLocationName, final String projectName,
-            final String projectVersion)
+            final String projectVersion, final Set<File> filesForIScan)
             throws IOException, ExecutableRunnerException, IntegrationException {
         logger.debug(String.format("extract() called; compileCommandsJsonFilePath: %s", compileCommandsJsonFilePath));
         final PkgMgr pkgMgr = selectPkgMgr(executor);
@@ -77,7 +77,7 @@ public class ClangExtractor {
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-            processCompileCommand(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, compileCommand);
+            processCompileCommand(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommand);
         }
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return bdioDocument;
@@ -97,7 +97,8 @@ public class ClangExtractor {
         return pkgMgr;
     }
 
-    private void processCompileCommand(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final CompileCommand compileCommand) {
+    private void processCompileCommand(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan,
+            final CompileCommand compileCommand) {
 
         final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
         final String generateDependenciesFileCommand = String.format(COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE, compileCommand.command, depsMkFile.getAbsolutePath());
@@ -116,12 +117,12 @@ public class ClangExtractor {
             return;
         }
         final List<DependencyFile> dependencyFiles = getDependencyFiles(sourceDir, dependencyFilePaths);
-        getPackages(executor, pkgMgr, dependencyGraph, dependencyFiles);
+        getPackages(executor, pkgMgr, dependencyGraph, filesForIScan, dependencyFiles);
     }
 
-    private void getPackages(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final List<DependencyFile> dependencyFiles) {
+    private void getPackages(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan, final List<DependencyFile> dependencyFiles) {
         for (final DependencyFile dependencyFile : dependencyFiles) {
-            final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(executor, dependencyFile);
+            final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile);
             for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
                 logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
                         dependencyDetails.getPackageVersion().orElse("<missing>")));
@@ -190,6 +191,7 @@ public class ClangExtractor {
         try {
             final String dirPath = dir.getCanonicalPath();
             final String filePath = file.getCanonicalPath();
+            logger.trace(String.format("\tactually comparing file path %s with dir path %s", filePath, dirPath));
             if (filePath.equals(dirPath) || filePath.startsWith(dirPath)) {
                 logger.trace("it is");
                 return true;

@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,7 +62,7 @@ public class Rpm implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final Executor executor, final DependencyFile dependencyFile) {
+    public List<DependencyDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
         final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getFile().getAbsolutePath());
         try {
@@ -88,6 +89,9 @@ public class Rpm implements PkgMgr {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
             if (!dependencyFile.isInBuildDir()) {
                 logger.info(String.format("*** %s should be scanned by iScan", dependencyFile.getFile().getAbsolutePath()));
+                filesForIScan.add(dependencyFile.getFile());
+            } else {
+                logger.trace(String.format("No point in scanning %s with iScan since it's in the source.dir", dependencyFile.getFile().getAbsolutePath()));
             }
             return dependencyDetailsList;
         }

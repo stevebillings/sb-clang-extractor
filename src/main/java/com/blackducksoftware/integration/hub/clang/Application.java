@@ -27,6 +27,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 import javax.annotation.PostConstruct;
 
@@ -81,8 +83,11 @@ public class Application {
     public void run() {
         try {
             prepareWorkingDir();
-            final SimpleBdioDocument bdioDocument = clangExtractor.extract(getSourceDir(), new SimpleExecutor(), compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion);
+            final Set<File> filesForIScan = new HashSet<>(64);
+            final SimpleBdioDocument bdioDocument = clangExtractor.extract(getSourceDir(), new SimpleExecutor(), compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion,
+                    filesForIScan);
             logger.info(String.format("Generated BDIO document BOM spdxName: %s", bdioDocument.billOfMaterials.spdxName));
+            logger.info(String.format("Found %d files that should be scanned by iScan", filesForIScan.size()));
             writeBdioToFile(bdioDocument, new File(outputBomFilePath));
         } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);

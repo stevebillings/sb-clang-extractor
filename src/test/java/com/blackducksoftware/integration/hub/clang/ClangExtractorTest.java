@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,7 +37,8 @@ public class ClangExtractorTest {
     public void test() throws IntegrationException, IOException, ExecutableRunnerException {
         final Executor executor = new MockExecutor();
         final SimpleBdioDocument bdio = extractor.extract(new File("src/test/resources/buildDir"), executor, "src/test/resources/buildDir/compile_commands.json", "src/test/resources/buildDir", "testCodeLocationName", "testProjectName",
-                "testProjectVersion");
+                "testProjectVersion",
+                new HashSet<File>());
         assertEquals("testCodeLocationName", bdio.billOfMaterials.spdxName);
         boolean foundDebianComp = false;
         boolean foundUbuntuComp = false;

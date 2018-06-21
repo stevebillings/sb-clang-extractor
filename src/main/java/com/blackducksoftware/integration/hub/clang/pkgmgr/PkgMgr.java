@@ -26,6 +26,7 @@ package com.blackducksoftware.integration.hub.clang.pkgmgr;
 import java.io.File;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 import org.slf4j.Logger;
 
@@ -60,7 +61,7 @@ public interface PkgMgr {
 
     List<Forge> getForges();
 
-    List<DependencyDetails> getDependencyDetails(Executor executor, DependencyFile dependencyFile);
+    List<DependencyDetails> getDependencyDetails(Executor executor, Set<File> filesForIScan, DependencyFile dependencyFile);
 
     String getCheckPresenceCommand();
 
