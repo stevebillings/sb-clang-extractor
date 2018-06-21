@@ -119,7 +119,7 @@ public class Apk implements PkgMgr {
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.error(String.format("Error executing %s: %s", getPackageCommand, e.getMessage()));
             if (!dependencyFile.isInBuildDir()) {
-                logger.info(String.format("*** %s should be scanned by iScan", dependencyFile.getFile().getAbsolutePath()));
+                logger.info(String.format("%s should be scanned by iScan", dependencyFile.getFile().getAbsolutePath()));
                 filesForIScan.add(dependencyFile.getFile());
             } else {
                 logger.trace(String.format("No point in scanning %s with iScan since it's in the source.dir", dependencyFile.getFile().getAbsolutePath()));

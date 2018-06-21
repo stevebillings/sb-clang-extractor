@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.Set;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,11 +36,16 @@ public class ClangExtractorTest {
 
     @Test
     public void test() throws IntegrationException, IOException, ExecutableRunnerException {
+        final File notInstalledByPkgMgrDepFile = new File("/tmp/notinstalledbypkgmgr.h");
+        notInstalledByPkgMgrDepFile.createNewFile();
         final Executor executor = new MockExecutor();
+        final Set<File> filesForIScan = new HashSet<>(1);
         final SimpleBdioDocument bdio = extractor.extract(new File("src/test/resources/buildDir"), executor, "src/test/resources/buildDir/compile_commands.json", "src/test/resources/buildDir", "testCodeLocationName", "testProjectName",
                 "testProjectVersion",
-                new HashSet<File>());
+                filesForIScan);
         assertEquals("testCodeLocationName", bdio.billOfMaterials.spdxName);
+        assertEquals(1, filesForIScan.size());
+        assertEquals("/tmp/notinstalledbypkgmgr.h", filesForIScan.iterator().next().getAbsolutePath());
         boolean foundDebianComp = false;
         boolean foundUbuntuComp = false;
         for (final BdioComponent comp : bdio.components) {

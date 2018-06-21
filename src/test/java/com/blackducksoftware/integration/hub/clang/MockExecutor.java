@@ -11,11 +11,15 @@ public class MockExecutor implements Executor {
 
     @Override
     public String execute(final File workingDir, final Map<String, String> environmentVariables, final String cmd) throws ExecutableRunnerException, IntegrationException {
+        System.out.printf("MockExecutor.execute(%s\n", cmd);
         if ("dpkg --version".equals(cmd)) {
             return "Debian 'dpkg' package management program version 1.19.0.5 (amd64).";
         }
         if ("rpm --version".equals(cmd)) {
             return "RPM version 4.11.3";
+        }
+        if (cmd.startsWith("dpkg -S /") && cmd.contains("notinstalledbypkgmgr")) {
+            throw new IntegrationException(String.format("Command %s failed", cmd));
         }
         if (cmd.startsWith("dpkg -S /")) {
             return "libc6-dev:amd64: /usr/include/wchar.h";
