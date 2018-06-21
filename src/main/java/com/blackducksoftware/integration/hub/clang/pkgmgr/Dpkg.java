@@ -36,7 +36,7 @@ import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
-import com.blackducksoftware.integration.hub.clang.DependencyDetails;
+import com.blackducksoftware.integration.hub.clang.PackageDetails;
 import com.blackducksoftware.integration.hub.clang.DependencyFile;
 import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
@@ -84,8 +84,8 @@ public class Dpkg implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
-        final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
+    public List<PackageDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
+        final List<PackageDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getFile().getAbsolutePath());
         try {
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
@@ -103,7 +103,7 @@ public class Dpkg implements PkgMgr {
         return dependencyDetailsList;
     }
 
-    private void addToPackageList(final Executor executor, final List<DependencyDetails> dependencyDetailsList, final String queryPackageOutput) {
+    private void addToPackageList(final Executor executor, final List<PackageDetails> dependencyDetailsList, final String queryPackageOutput) {
         final String[] packageLines = queryPackageOutput.split("\n");
         for (final String packageLine : packageLines) {
             if (!valid(packageLine)) {
@@ -116,7 +116,7 @@ public class Dpkg implements PkgMgr {
             final String packageArch = packageNameArchParts[1];
             logger.debug(String.format("package name: %s; arch: %s", packageName, packageArch));
             final Optional<String> packageVersion = getPackageVersion(executor, packageName);
-            final DependencyDetails dependencyDetails = new DependencyDetails(Optional.of(packageName), packageVersion, Optional.of(packageArch));
+            final PackageDetails dependencyDetails = new PackageDetails(Optional.of(packageName), packageVersion, Optional.of(packageArch));
             dependencyDetailsList.add(dependencyDetails);
         }
     }

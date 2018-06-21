@@ -36,7 +36,7 @@ import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
-import com.blackducksoftware.integration.hub.clang.DependencyDetails;
+import com.blackducksoftware.integration.hub.clang.PackageDetails;
 import com.blackducksoftware.integration.hub.clang.DependencyFile;
 import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
@@ -62,8 +62,8 @@ public class Rpm implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
-        final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
+    public List<PackageDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
+        final List<PackageDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getFile().getAbsolutePath());
         try {
             final String queryPackageOutput = executor.execute(new File("."), null, getPackageCommand);
@@ -81,7 +81,7 @@ public class Rpm implements PkgMgr {
                 final int secondToLastDashIndex = nameVersion.lastIndexOf('-');
                 final String versionRelease = packageLine.substring(secondToLastDashIndex + 1, lastDotIndex);
                 final String artifact = packageLine.substring(0, secondToLastDashIndex);
-                final DependencyDetails dependencyDetails = new DependencyDetails(Optional.ofNullable(artifact), Optional.ofNullable(versionRelease), Optional.ofNullable(arch));
+                final PackageDetails dependencyDetails = new PackageDetails(Optional.ofNullable(artifact), Optional.ofNullable(versionRelease), Optional.ofNullable(arch));
                 dependencyDetailsList.add(dependencyDetails);
             }
             return dependencyDetailsList;

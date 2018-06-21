@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
@@ -57,7 +58,7 @@ public class ClangExtractor {
     public static final String DEPS_MK_PATH = "deps.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final Set<File> processedDependencyFiles = new HashSet<>(200);
-    private final Set<DependencyDetails> processedDependencies = new HashSet<>(40);
+    private final Set<PackageDetails> processedDependencies = new HashSet<>(40);
 
     @Autowired
     private List<PkgMgr> pkgMgrs;
@@ -77,7 +78,11 @@ public class ClangExtractor {
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-            processCompileCommand(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommand);
+            final Optional<File> depsMkFile = generateDependencyFileByCompiling(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommand);
+            final List<String> dependencyFilePaths = parseDependencyFile(depsMkFile);
+            final List<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
+            final List<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
+            generateBdioComponents(executor, pkgMgr, dependencyGraph, filesForIScan, packages);
         }
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return bdioDocument;
@@ -97,7 +102,7 @@ public class ClangExtractor {
         return pkgMgr;
     }
 
-    private void processCompileCommand(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan,
+    private Optional<File> generateDependencyFileByCompiling(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan,
             final CompileCommand compileCommand) {
 
         final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
@@ -106,31 +111,56 @@ public class ClangExtractor {
             executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
         } catch (ExecutableRunnerException | IntegrationException e) {
             logger.debug(String.format("Error compiling with command '%s': %s", generateDependenciesFileCommand, e.getMessage()));
-            return;
+            return Optional.empty();
         }
-
-        List<String> dependencyFilePaths;
-        try {
-            dependencyFilePaths = getDependencyFilePaths(depsMkFile);
-        } catch (final IOException e) {
-            logger.warn(String.format("Error getting dependency file paths for '%s': %s", compileCommand.toString(), e.getMessage()));
-            return;
-        }
-        final List<DependencyFile> dependencyFiles = getDependencyFiles(sourceDir, dependencyFilePaths);
-        getPackages(executor, pkgMgr, dependencyGraph, filesForIScan, dependencyFiles);
+        return Optional.of(depsMkFile);
     }
 
-    private void getPackages(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan, final List<DependencyFile> dependencyFiles) {
+    private List<String> parseDependencyFile(final Optional<File> depsMkFile) {
+        if (!depsMkFile.isPresent()) {
+            return new ArrayList<>(0);
+        }
+        List<String> dependencyFilePaths;
+        try {
+            final String depsDecl = FileUtils.readFileToString(depsMkFile.get(), StandardCharsets.UTF_8);
+            final String[] depsDeclParts = depsDecl.split(": ");
+            String depsListString = depsDeclParts[1];
+            logger.trace(String.format("dependencies: %s", depsListString));
+
+            depsListString = depsListString.replaceAll("\n", " ");
+            logger.trace(String.format("dependencies, newlines removed: %s", depsListString));
+
+            depsListString = depsListString.replaceAll("\\\\", " ");
+            logger.trace(String.format("dependencies, backslashes removed: %s", depsListString));
+
+            final String[] deps = depsListString.split("\\s+");
+            for (final String includeFile : deps) {
+                logger.trace(String.format("\t%s", includeFile));
+            }
+            dependencyFilePaths = Arrays.asList(deps);
+        } catch (final IOException e) {
+            logger.warn(String.format("Error getting dependency file paths from '%s': %s", depsMkFile.get().getAbsolutePath(), e.getMessage()));
+            return new ArrayList<>(0);
+        }
+        return dependencyFilePaths;
+    }
+
+    private List<PackageDetails> getPackages(final Executor executor, final PkgMgr pkgMgr, final List<DependencyFile> dependencyFiles, final Set<File> filesForIScan) {
+        final List<PackageDetails> packages = new ArrayList<>();
         for (final DependencyFile dependencyFile : dependencyFiles) {
-            final List<DependencyDetails> dependencyDetailsList = pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile);
-            for (final DependencyDetails dependencyDetails : dependencyDetailsList) {
-                logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
-                        dependencyDetails.getPackageVersion().orElse("<missing>")));
-                if (dependencyAlreadyProcessed(dependencyDetails)) {
-                    logger.trace(String.format("dependency %s has already been processed", dependencyDetails.toString()));
-                } else if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
-                    createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
-                }
+            packages.addAll(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile));
+        }
+        return packages;
+    }
+
+    private void generateBdioComponents(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan, final List<PackageDetails> packages) {
+        for (final PackageDetails dependencyDetails : packages) {
+            logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
+                    dependencyDetails.getPackageVersion().orElse("<missing>")));
+            if (dependencyAlreadyProcessed(dependencyDetails)) {
+                logger.trace(String.format("dependency %s has already been processed", dependencyDetails.toString()));
+            } else if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
+                createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
             }
         }
     }
@@ -146,26 +176,7 @@ public class ClangExtractor {
         }
     }
 
-    private List<String> getDependencyFilePaths(final File depsMkFile) throws IOException {
-        final String depsDecl = FileUtils.readFileToString(depsMkFile, StandardCharsets.UTF_8);
-        final String[] depsDeclParts = depsDecl.split(": ");
-        String depsListString = depsDeclParts[1];
-        logger.trace(String.format("dependencies: %s", depsListString));
-
-        depsListString = depsListString.replaceAll("\n", " ");
-        logger.trace(String.format("dependencies, newlines removed: %s", depsListString));
-
-        depsListString = depsListString.replaceAll("\\\\", " ");
-        logger.trace(String.format("dependencies, backslashes removed: %s", depsListString));
-
-        final String[] deps = depsListString.split("\\s+");
-        for (final String includeFile : deps) {
-            logger.trace(String.format("\t%s", includeFile));
-        }
-        return Arrays.asList(deps);
-    }
-
-    private List<DependencyFile> getDependencyFiles(final File sourceDir, final List<String> dependencies) {
+    private List<DependencyFile> getNewValidDependencyFiles(final File sourceDir, final List<String> dependencies) {
         final List<DependencyFile> dependencyFiles = new ArrayList<>(dependencies.size());
         for (final String dependency : dependencies) {
             if (StringUtils.isBlank(dependency)) {
@@ -212,7 +223,7 @@ public class ClangExtractor {
         return false;
     }
 
-    private boolean dependencyAlreadyProcessed(final DependencyDetails dependency) {
+    private boolean dependencyAlreadyProcessed(final PackageDetails dependency) {
         if (processedDependencies.contains(dependency)) {
             return true;
         }

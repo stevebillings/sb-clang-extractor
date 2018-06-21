@@ -28,12 +28,12 @@ import java.util.Optional;
 import org.apache.commons.lang3.builder.RecursiveToStringStyle;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
-public class DependencyDetails {
+public class PackageDetails {
     private final Optional<String> packageName;
     private final Optional<String> packageVersion;
     private final Optional<String> packageArch;
 
-    public DependencyDetails(final Optional<String> packageName, final Optional<String> packageVersion, final Optional<String> packageArch) {
+    public PackageDetails(final Optional<String> packageName, final Optional<String> packageVersion, final Optional<String> packageArch) {
         this.packageName = packageName;
         this.packageVersion = packageVersion;
         this.packageArch = packageArch;
@@ -77,7 +77,7 @@ public class DependencyDetails {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        final DependencyDetails other = (DependencyDetails) obj;
+        final PackageDetails other = (PackageDetails) obj;
         if (packageArch == null) {
             if (other.packageArch != null) {
                 return false;

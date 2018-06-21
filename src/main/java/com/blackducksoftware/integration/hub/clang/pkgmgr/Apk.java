@@ -37,7 +37,7 @@ import org.springframework.stereotype.Component;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.Forge;
-import com.blackducksoftware.integration.hub.clang.DependencyDetails;
+import com.blackducksoftware.integration.hub.clang.PackageDetails;
 import com.blackducksoftware.integration.hub.clang.DependencyFile;
 import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
@@ -71,8 +71,8 @@ public class Apk implements PkgMgr {
     }
 
     @Override
-    public List<DependencyDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
-        final List<DependencyDetails> dependencyDetailsList = new ArrayList<>(3);
+    public List<PackageDetails> getDependencyDetails(final Executor executor, final Set<File> filesForIScan, final DependencyFile dependencyFile) {
+        final List<PackageDetails> dependencyDetailsList = new ArrayList<>(3);
         final String getPackageCommand = String.format(QUERY_DEPENDENCY_FILE_COMMAND_PATTERN, dependencyFile.getFile().getAbsolutePath());
         try {
             if (architecture == null) {
@@ -111,7 +111,7 @@ public class Apk implements PkgMgr {
                 if (!component.startsWith(".")) {
                     final String externalId = String.format("%s/%s/%s", component, version, architecture);
                     logger.debug(String.format("Constructed externalId: %s", externalId));
-                    final DependencyDetails dependencyDetails = new DependencyDetails(Optional.ofNullable(component), Optional.ofNullable(version), Optional.ofNullable(architecture));
+                    final PackageDetails dependencyDetails = new PackageDetails(Optional.ofNullable(component), Optional.ofNullable(version), Optional.ofNullable(architecture));
                     dependencyDetailsList.add(dependencyDetails);
                 }
             }
