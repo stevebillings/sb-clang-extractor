@@ -74,8 +74,8 @@ public class ClangExtractor {
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final CompileCommand[] compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
         final Set<String> dependencyFilePaths = getDependencyFilePaths(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommands);
-        final List<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
-        final List<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
+        final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
+        final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
         final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
         populateGraph(dependencyGraph, bdioComponents);
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
@@ -88,7 +88,7 @@ public class ClangExtractor {
         }
     }
 
-    private List<Dependency> getBdioComponents(final PkgMgr pkgMgr, final List<PackageDetails> packages) {
+    private List<Dependency> getBdioComponents(final PkgMgr pkgMgr, final Set<PackageDetails> packages) {
         final List<Dependency> dependencies = new ArrayList<>();
         for (final PackageDetails pkg : packages) {
             logger.debug(String.format("Package name//arch//version: %s//%s//%s", pkg.getPackageName().orElse("<missing>"), pkg.getPackageArch().orElse("<missing>"),
@@ -191,17 +191,17 @@ public class ClangExtractor {
         return dependencyFilePaths;
     }
 
-    private List<PackageDetails> getPackages(final Executor executor, final PkgMgr pkgMgr, final List<DependencyFile> dependencyFiles, final Set<File> filesForIScan) {
-        final List<PackageDetails> packages = new ArrayList<>();
+    private Set<PackageDetails> getPackages(final Executor executor, final PkgMgr pkgMgr, final Set<DependencyFile> dependencyFiles, final Set<File> filesForIScan) {
+        final Set<PackageDetails> packages = new HashSet<>();
         for (final DependencyFile dependencyFile : dependencyFiles) {
             packages.addAll(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile));
         }
         return packages;
     }
 
-    private List<DependencyFile> getNewValidDependencyFiles(final File sourceDir, final Set<String> dependencies) {
-        final List<DependencyFile> dependencyFiles = new ArrayList<>(dependencies.size());
-        for (final String dependency : dependencies) {
+    private Set<DependencyFile> getNewValidDependencyFiles(final File sourceDir, final Set<String> dependencyFilePaths) {
+        final Set<DependencyFile> dependencyFiles = new HashSet<>(dependencyFilePaths.size());
+        for (final String dependency : dependencyFilePaths) {
             if (StringUtils.isBlank(dependency)) {
                 continue;
             }
