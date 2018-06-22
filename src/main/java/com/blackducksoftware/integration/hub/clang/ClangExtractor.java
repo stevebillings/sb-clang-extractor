@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -102,18 +101,24 @@ public class ClangExtractor {
                 return dependencyFileWrapper;
             }
         };
+        final Function<DependencyFile, Set<PackageDetails>> dependencyFileToPackage = (final DependencyFile dependencyFile) -> {
+            return new HashSet<>(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile));
+        };
 
-        final Set<DependencyFile> dependencyFiles = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
+        final Set<PackageDetails> packages = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
             a.addAll(b);
             return a;
-        }).stream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).collect(Collectors.toSet());
-        for (final DependencyFile dependencyFile : dependencyFiles) {
-            System.out.printf("*** dependencyFilePath: %s\n", dependencyFile.getFile().getAbsolutePath());
+        }).stream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).map(dependencyFileToPackage).reduce(new HashSet<PackageDetails>(), (a, b) -> {
+            a.addAll(b);
+            return a;
+        });
+        for (final PackageDetails pkg : packages) {
+            System.out.printf("*** packageDetails: %s\n", pkg.getPackageName());
         }
         ////////////////////////////////////////////
 
         // final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
-        final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
+        // final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
         final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
         populateGraph(dependencyGraph, bdioComponents);
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
