@@ -72,7 +72,7 @@ public class ClangExtractor {
         final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(pkgMgr.getDefaultForge(), projectName, projectVersion);
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
-        final CompileCommand[] compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
+        final List<CompileCommand> compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
         final Set<String> dependencyFilePaths = getDependencyFilePaths(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommands);
         final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
         final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
@@ -115,16 +115,16 @@ public class ClangExtractor {
         return dependencies;
     }
 
-    private CompileCommand[] parseCompileCommandsFile(final String compileCommandsJsonFilePath) throws IOException {
+    private List<CompileCommand> parseCompileCommandsFile(final String compileCommandsJsonFilePath) throws IOException {
         final File compileCommandsJsonFile = new File(compileCommandsJsonFilePath);
         final String compileCommandsJson = FileUtils.readFileToString(compileCommandsJsonFile, StandardCharsets.UTF_8);
         final Gson gson = new Gson();
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
-        return compileCommands;
+        return Arrays.asList(compileCommands);
     }
 
     private Set<String> getDependencyFilePaths(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan,
-            final CompileCommand[] compileCommands) {
+            final List<CompileCommand> compileCommands) {
         final Set<String> dependencyFilePaths = new HashSet<>();
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
