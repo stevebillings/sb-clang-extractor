@@ -72,20 +72,66 @@ public class ClangExtractor {
         final ExternalId projectExternalId = new SimpleBdioFactory().createNameVersionExternalId(pkgMgr.getDefaultForge(), projectName, projectVersion);
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
+        final CompileCommand[] compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
+        final Set<String> dependencyFilePaths = getDependencyFilePaths(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommands);
+        final List<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
+        final List<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
+        final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
+        populateGraph(dependencyGraph, bdioComponents);
+        new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
+        return bdioDocument;
+    }
+
+    private void populateGraph(final MutableDependencyGraph graph, final List<Dependency> bdioComponents) {
+        for (final Dependency bdioComponent : bdioComponents) {
+            graph.addChildToRoot(bdioComponent);
+        }
+    }
+
+    private List<Dependency> getBdioComponents(final PkgMgr pkgMgr, final List<PackageDetails> packages) {
+        final List<Dependency> dependencies = new ArrayList<>();
+        for (final PackageDetails pkg : packages) {
+            logger.debug(String.format("Package name//arch//version: %s//%s//%s", pkg.getPackageName().orElse("<missing>"), pkg.getPackageArch().orElse("<missing>"),
+                    pkg.getPackageVersion().orElse("<missing>")));
+            if (dependencyAlreadyProcessed(pkg)) {
+                logger.trace(String.format("dependency %s has already been processed", pkg.toString()));
+            } else if (pkg.getPackageName().isPresent() && pkg.getPackageVersion().isPresent() && pkg.getPackageArch().isPresent()) {
+                dependencies.addAll(getBdioComponents(pkgMgr, pkg.getPackageName().get(), pkg.getPackageVersion().get(), pkg.getPackageArch().get()));
+            }
+        }
+        return dependencies;
+    }
+
+    private List<Dependency> getBdioComponents(final PkgMgr pkgMgr, final String name, final String version, final String arch) {
+        final List<Dependency> dependencies = new ArrayList<>();
+        final String externalId = String.format("%s/%s/%s", name, version, arch);
+        logger.trace(String.format("Constructed externalId: %s", externalId));
+        for (final Forge forge : pkgMgr.getForges()) {
+            final ExternalId extId = new SimpleBdioFactory().createArchitectureExternalId(forge, name, version, arch);
+            final Dependency dep = new SimpleBdioFactory().createDependency(name, version, extId);
+            logger.info(String.format("forge: %s: adding %s version %s as child to dependency node tree; externalId: %s", forge.getName(), dep.name, dep.version, dep.externalId.createBdioId()));
+            dependencies.add(dep);
+        }
+        return dependencies;
+    }
+
+    private CompileCommand[] parseCompileCommandsFile(final String compileCommandsJsonFilePath) throws IOException {
         final File compileCommandsJsonFile = new File(compileCommandsJsonFilePath);
         final String compileCommandsJson = FileUtils.readFileToString(compileCommandsJsonFile, StandardCharsets.UTF_8);
         final Gson gson = new Gson();
         final CompileCommand[] compileCommands = gson.fromJson(compileCommandsJson, CompileCommand[].class);
+        return compileCommands;
+    }
+
+    private Set<String> getDependencyFilePaths(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan,
+            final CompileCommand[] compileCommands) {
+        final Set<String> dependencyFilePaths = new HashSet<>();
         for (final CompileCommand compileCommand : compileCommands) {
             logger.debug(String.format("compileCommand:\n\tdirectory: %s;\n\tcommand: %s;\n\tfile: %s", compileCommand.directory, compileCommand.command, compileCommand.file));
-            final Optional<File> depsMkFile = generateDependencyFileByCompiling(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommand);
-            final List<String> dependencyFilePaths = parseDependencyFile(depsMkFile);
-            final List<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
-            final List<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
-            generateBdioComponents(executor, pkgMgr, dependencyGraph, filesForIScan, packages);
+            final Optional<File> depsMkFile = generateDependencyFileByCompiling(executor, workingDir, compileCommand);
+            dependencyFilePaths.addAll(parseDependencyFile(depsMkFile));
         }
-        new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
-        return bdioDocument;
+        return dependencyFilePaths;
     }
 
     private PkgMgr selectPkgMgr(final Executor executor) throws IntegrationException {
@@ -102,7 +148,7 @@ public class ClangExtractor {
         return pkgMgr;
     }
 
-    private Optional<File> generateDependencyFileByCompiling(final File sourceDir, final Executor executor, final PkgMgr pkgMgr, final File workingDir, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan,
+    private Optional<File> generateDependencyFileByCompiling(final Executor executor, final File workingDir,
             final CompileCommand compileCommand) {
 
         final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
@@ -153,30 +199,7 @@ public class ClangExtractor {
         return packages;
     }
 
-    private void generateBdioComponents(final Executor executor, final PkgMgr pkgMgr, final MutableDependencyGraph dependencyGraph, final Set<File> filesForIScan, final List<PackageDetails> packages) {
-        for (final PackageDetails dependencyDetails : packages) {
-            logger.debug(String.format("Package name//arch//version: %s//%s//%s", dependencyDetails.getPackageName().orElse("<missing>"), dependencyDetails.getPackageArch().orElse("<missing>"),
-                    dependencyDetails.getPackageVersion().orElse("<missing>")));
-            if (dependencyAlreadyProcessed(dependencyDetails)) {
-                logger.trace(String.format("dependency %s has already been processed", dependencyDetails.toString()));
-            } else if (dependencyDetails.getPackageName().isPresent() && dependencyDetails.getPackageVersion().isPresent() && dependencyDetails.getPackageArch().isPresent()) {
-                createBdioComponent(pkgMgr, dependencyGraph, dependencyDetails.getPackageName().get(), dependencyDetails.getPackageVersion().get(), dependencyDetails.getPackageArch().get());
-            }
-        }
-    }
-
-    private void createBdioComponent(final PkgMgr pkgMgr, final MutableDependencyGraph dependencies, final String name, final String version, final String arch) {
-        final String externalId = String.format("%s/%s/%s", name, version, arch);
-        logger.trace(String.format("Constructed externalId: %s", externalId));
-        for (final Forge forge : pkgMgr.getForges()) {
-            final ExternalId extId = new SimpleBdioFactory().createArchitectureExternalId(forge, name, version, arch);
-            final Dependency dep = new SimpleBdioFactory().createDependency(name, version, extId); // createDependencyNode(forge, name, version, arch);
-            logger.info(String.format("forge: %s: adding %s version %s as child to dependency node tree; externalId: %s", forge.getName(), dep.name, dep.version, dep.externalId.createBdioId()));
-            dependencies.addChildToRoot(dep);
-        }
-    }
-
-    private List<DependencyFile> getNewValidDependencyFiles(final File sourceDir, final List<String> dependencies) {
+    private List<DependencyFile> getNewValidDependencyFiles(final File sourceDir, final Set<String> dependencies) {
         final List<DependencyFile> dependencyFiles = new ArrayList<>(dependencies.size());
         for (final String dependency : dependencies) {
             if (StringUtils.isBlank(dependency)) {
