@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -73,7 +74,25 @@ public class ClangExtractor {
         final SimpleBdioDocument bdioDocument = new SimpleBdioFactory().createSimpleBdioDocument(codeLocationName, projectName, projectVersion, projectExternalId);
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final List<CompileCommand> compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
-        final Set<String> dependencyFilePaths = getDependencyFilePaths(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommands);
+
+        ///////////////// new stuff
+        final Function<CompileCommand, Set<String>> compileCommandToDependencyFilePaths = (final CompileCommand compileCommand) -> {
+            final Set<String> dependencyFilePaths = new HashSet<>();
+            final Optional<File> depsMkFile = generateDependencyFileByCompiling(executor, workingDir, compileCommand);
+            dependencyFilePaths.addAll(parseDependencyFile(depsMkFile));
+            return dependencyFilePaths;
+        };
+        final Set<String> dependencyFilePaths = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
+            a.addAll(b);
+            return a;
+        });
+        for (final String dependencyFilePath : dependencyFilePaths) {
+            System.out.printf("*** dependencyFilePathExperimental: %s\n", dependencyFilePath);
+        }
+        ////////////////////////////////////////////
+
+        // final Set<String> dependencyFilePaths = getDependencyFilePaths(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommands);
+
         final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
         final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
         final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
