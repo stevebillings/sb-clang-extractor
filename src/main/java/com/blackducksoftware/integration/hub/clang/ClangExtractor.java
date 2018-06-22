@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -82,18 +83,36 @@ public class ClangExtractor {
             dependencyFilePaths.addAll(parseDependencyFile(depsMkFile));
             return dependencyFilePaths;
         };
-        final Set<String> dependencyFilePaths = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
+
+        final Function<String, DependencyFile> convertPathToNewValidDependencyFile = (final String depFilePath) -> {
+            if (StringUtils.isBlank(depFilePath)) {
+                return null; // Optional?
+            }
+            logger.trace(String.format("Expanding dependency %s to full path", depFilePath));
+            final File dependencyFile = new File(depFilePath);
+            if (dependencyFileAlreadyProcessed(dependencyFile)) {
+                logger.trace(String.format("Dependency file %s has already been processed", dependencyFile.getAbsolutePath()));
+                return null;
+            } else if (!dependencyFile.exists()) {
+                logger.debug(String.format("Dependency file %s does NOT exist", dependencyFile.getAbsolutePath()));
+                return null;
+            } else {
+                logger.trace(String.format("Dependency file %s does exist", dependencyFile.getAbsolutePath()));
+                final DependencyFile dependencyFileWrapper = new DependencyFile(isUnder(sourceDir, dependencyFile) ? true : false, dependencyFile);
+                return dependencyFileWrapper;
+            }
+        };
+
+        final Set<DependencyFile> dependencyFiles = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
             a.addAll(b);
             return a;
-        });
-        for (final String dependencyFilePath : dependencyFilePaths) {
-            System.out.printf("*** dependencyFilePathExperimental: %s\n", dependencyFilePath);
+        }).stream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).collect(Collectors.toSet());
+        for (final DependencyFile dependencyFile : dependencyFiles) {
+            System.out.printf("*** dependencyFilePath: %s\n", dependencyFile.getFile().getAbsolutePath());
         }
         ////////////////////////////////////////////
 
-        // final Set<String> dependencyFilePaths = getDependencyFilePaths(sourceDir, executor, pkgMgr, workingDir, dependencyGraph, filesForIScan, compileCommands);
-
-        final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
+        // final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
         final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
         final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
         populateGraph(dependencyGraph, bdioComponents);
