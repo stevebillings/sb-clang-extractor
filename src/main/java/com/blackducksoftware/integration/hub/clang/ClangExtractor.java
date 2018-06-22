@@ -104,22 +104,36 @@ public class ClangExtractor {
         final Function<DependencyFile, Set<PackageDetails>> dependencyFileToPackage = (final DependencyFile dependencyFile) -> {
             return new HashSet<>(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile));
         };
+        final Function<PackageDetails, List<Dependency>> packageToDependencies = (final PackageDetails pkg) -> {
+            final List<Dependency> dependencies = new ArrayList<>();
+            logger.debug(String.format("Package name//arch//version: %s//%s//%s", pkg.getPackageName().orElse("<missing>"), pkg.getPackageArch().orElse("<missing>"),
+                    pkg.getPackageVersion().orElse("<missing>")));
+            if (dependencyAlreadyProcessed(pkg)) {
+                logger.trace(String.format("dependency %s has already been processed", pkg.toString()));
+            } else if (pkg.getPackageName().isPresent() && pkg.getPackageVersion().isPresent() && pkg.getPackageArch().isPresent()) {
+                dependencies.addAll(getBdioComponents(pkgMgr, pkg.getPackageName().get(), pkg.getPackageVersion().get(), pkg.getPackageArch().get()));
+            }
+            return dependencies;
+        };
 
-        final Set<PackageDetails> packages = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
+        final List<Dependency> bdioComponents = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
             a.addAll(b);
             return a;
-        }).stream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).map(dependencyFileToPackage).reduce(new HashSet<PackageDetails>(), (a, b) -> {
+        }).stream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).map(dependencyFileToPackage).reduce(new HashSet<>(), (a, b) -> {
+            a.addAll(b);
+            return a;
+        }).stream().map(packageToDependencies).reduce(new ArrayList<Dependency>(), (a, b) -> {
             a.addAll(b);
             return a;
         });
-        for (final PackageDetails pkg : packages) {
-            System.out.printf("*** packageDetails: %s\n", pkg.getPackageName());
+        for (final Dependency bdioComponent : bdioComponents) {
+            System.out.printf("*** bdioComponent: %s\n", bdioComponent.externalId);
         }
         ////////////////////////////////////////////
 
         // final Set<DependencyFile> dependencyFiles = getNewValidDependencyFiles(sourceDir, dependencyFilePaths);
         // final Set<PackageDetails> packages = getPackages(executor, pkgMgr, dependencyFiles, filesForIScan);
-        final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
+        // final List<Dependency> bdioComponents = getBdioComponents(pkgMgr, packages);
         populateGraph(dependencyGraph, bdioComponents);
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return bdioDocument;
