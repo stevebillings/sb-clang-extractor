@@ -104,7 +104,7 @@ public class Application {
 
     private void prepareWorkingDir() throws IntegrationException {
         final File workingDir = new File(this.workingDirPath);
-        final File depsFile = new File(workingDir, ClangExtractor.DEPS_MK_PATH);
+        final File depsFile = new File(workingDir, String.format(ClangExtractor.DEPS_MK_FILENAME_PATTERN, "test", 0));
         FileUtils.deleteQuietly(depsFile);
         try {
             depsFile.createNewFile();

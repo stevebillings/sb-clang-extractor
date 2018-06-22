@@ -26,6 +26,7 @@ package com.blackducksoftware.integration.hub.clang;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -56,7 +57,7 @@ import com.google.gson.Gson;
 @Component
 public class ClangExtractor {
     private static final String COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE = "%s -M -MF %s";
-    public static final String DEPS_MK_PATH = "deps.mk";
+    public static final String DEPS_MK_FILENAME_PATTERN = "deps_%s_%d.mk";
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final Set<File> processedDependencyFiles = new HashSet<>(200);
     private final Set<PackageDetails> processedDependencies = new HashSet<>(40);
@@ -116,13 +117,13 @@ public class ClangExtractor {
             return dependencies;
         };
 
-        final List<Dependency> bdioComponents = compileCommands.stream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
+        final List<Dependency> bdioComponents = compileCommands.parallelStream().map(compileCommandToDependencyFilePaths).reduce(new HashSet<>(), (a, b) -> {
             a.addAll(b);
             return a;
-        }).stream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).map(dependencyFileToPackage).reduce(new HashSet<>(), (a, b) -> {
+        }).parallelStream().map(convertPathToNewValidDependencyFile).filter(f -> f != null).map(dependencyFileToPackage).reduce(new HashSet<>(), (a, b) -> {
             a.addAll(b);
             return a;
-        }).stream().map(packageToDependencies).reduce(new ArrayList<Dependency>(), (a, b) -> {
+        }).parallelStream().map(packageToDependencies).reduce(new ArrayList<Dependency>(), (a, b) -> {
             a.addAll(b);
             return a;
         });
@@ -208,7 +209,10 @@ public class ClangExtractor {
     private Optional<File> generateDependencyFileByCompiling(final Executor executor, final File workingDir,
             final CompileCommand compileCommand) {
 
-        final File depsMkFile = new File(workingDir, DEPS_MK_PATH);
+        final int randomInt = (int) (Math.random() * 1000);
+        final String sourceFilenameBase = getFilenameBase(compileCommand.file);
+        final String depsMkFilename = String.format(DEPS_MK_FILENAME_PATTERN, sourceFilenameBase, randomInt);
+        final File depsMkFile = new File(workingDir, depsMkFilename);
         final String generateDependenciesFileCommand = String.format(COMPILE_CMD_PATTERN_WITH_DEPENDENCY_OUTPUT_FILE, compileCommand.command, depsMkFile.getAbsolutePath());
         try {
             executor.execute(new File(compileCommand.directory), null, generateDependenciesFileCommand);
@@ -217,6 +221,18 @@ public class ClangExtractor {
             return Optional.empty();
         }
         return Optional.of(depsMkFile);
+    }
+
+    // TODO belongs elsewhere?
+    private String getFilenameBase(final String filePath) {
+        final File f = new File(filePath);
+        final Path p = f.toPath();
+        final String filename = p.getFileName().toString();
+        if (!filename.contains(".")) {
+            return filename;
+        }
+        final int dotIndex = filename.indexOf('.');
+        return filename.substring(0, dotIndex);
     }
 
     private List<String> parseDependencyFile(final Optional<File> depsMkFile) {
