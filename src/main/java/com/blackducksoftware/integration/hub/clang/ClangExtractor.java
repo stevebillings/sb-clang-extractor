@@ -81,6 +81,7 @@ public class ClangExtractor {
             final Set<String> dependencyFilePaths = new HashSet<>();
             final Optional<File> depsMkFile = generateDependencyFileByCompiling(executor, workingDir, compileCommand);
             dependencyFilePaths.addAll(parseDependencyFile(depsMkFile));
+            depsMkFile.ifPresent(f -> f.delete());
             return dependencyFilePaths;
         };
 
