@@ -5,11 +5,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +15,6 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.model.BdioComponent;
-import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
 import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.blackducksoftware.integration.hub.clang.execute.fromdetect.ExecutableRunnerException;
 
@@ -35,24 +31,22 @@ public class ClangExtractorTest {
         workingDir.mkdir();
     }
 
-    // TODO
-    @Ignore
     @Test
     public void test() throws IntegrationException, IOException, ExecutableRunnerException {
         final File notInstalledByPkgMgrDepFile = new File("/tmp/notinstalledbypkgmgr.h");
         notInstalledByPkgMgrDepFile.createNewFile();
         final Executor executor = new MockExecutor();
-        final Set<File> filesForIScan = ConcurrentHashMap.newKeySet();
-        final SimpleBdioDocument bdio = extractor.extract(new File("src/test/resources/buildDir"), executor, "src/test/resources/buildDir/compile_commands.json", "src/test/resources/buildDir", "testCodeLocationName", "testProjectName",
-                "testProjectVersion",
-                filesForIScan);
-        assertEquals("testCodeLocationName", bdio.billOfMaterials.spdxName);
-        assertEquals(1, filesForIScan.size());
-        assertEquals("/tmp/notinstalledbypkgmgr.h", filesForIScan.iterator().next().getAbsolutePath());
-        assertEquals(2, bdio.components.size());
+        final DependencyFileManager dependencyFileParser = new MockDependencyFileManager();
+        final ExtractorResults results = extractor.extract(new File("src/test/resources/buildDir"), executor, dependencyFileParser, "src/test/resources/buildDir/compile_commands.json", "src/test/resources/buildDir", "testCodeLocationName",
+                "testProjectName",
+                "testProjectVersion");
+        assertEquals("testCodeLocationName", results.getBdioDocument().billOfMaterials.spdxName);
+        assertEquals(1, results.getFilesForIScan().size());
+        assertEquals("/tmp/notinstalledbypkgmgr.h", results.getFilesForIScan().iterator().next().getAbsolutePath());
+        assertEquals(2, results.getBdioDocument().components.size());
         boolean foundDebianComp = false;
         boolean foundUbuntuComp = false;
-        for (final BdioComponent comp : bdio.components) {
+        for (final BdioComponent comp : results.getBdioDocument().components) {
             if ("http:ubuntu/libc6_dev/2_27_3ubuntu1/amd64".equals(comp.id)) {
                 System.out.printf("Found %s\n", comp.id);
                 assertEquals("libc6-dev", comp.name);

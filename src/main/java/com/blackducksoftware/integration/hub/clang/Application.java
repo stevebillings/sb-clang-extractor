@@ -27,8 +27,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
 
 import javax.annotation.PostConstruct;
 
@@ -44,7 +42,7 @@ import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.bdio.BdioWriter;
 import com.blackducksoftware.integration.hub.bdio.SimpleBdioFactory;
 import com.blackducksoftware.integration.hub.bdio.model.SimpleBdioDocument;
-import com.blackducksoftware.integration.hub.clang.execute.SimpleExecutor;
+import com.blackducksoftware.integration.hub.clang.execute.Executor;
 import com.google.gson.Gson;
 
 @SpringBootApplication
@@ -53,6 +51,12 @@ public class Application {
 
     @Autowired
     private ClangExtractor clangExtractor;
+
+    @Autowired
+    private Executor executor;
+
+    @Autowired
+    private DependencyFileManager dependencyFileParser;
 
     @Value("${source.dir:.}")
     private String sourceDirPath;
@@ -83,12 +87,10 @@ public class Application {
     public void run() {
         try {
             prepareWorkingDir();
-            final Set<File> filesForIScan = new HashSet<>(64);
-            final SimpleBdioDocument bdioDocument = clangExtractor.extract(getSourceDir(), new SimpleExecutor(), compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion,
-                    filesForIScan);
-            logger.info(String.format("Generated BDIO document BOM spdxName: %s", bdioDocument.billOfMaterials.spdxName));
-            logger.info(String.format("Found %d files that should be scanned by iScan", filesForIScan.size()));
-            writeBdioToFile(bdioDocument, new File(outputBomFilePath));
+            final ExtractorResults result = clangExtractor.extract(getSourceDir(), executor, dependencyFileParser, compileCommandsJsonFilePath, workingDirPath, codeLocationName, projectName, projectVersion);
+            logger.info(String.format("Generated BDIO document BOM spdxName: %s", result.getBdioDocument().billOfMaterials.spdxName));
+            logger.info(String.format("Found %d files that should be scanned by iScan", result.getFilesForIScan().size()));
+            writeBdioToFile(result.getBdioDocument(), new File(outputBomFilePath));
         } catch (final Exception e) {
             logger.error(String.format("Error: %s", e.getMessage()), e);
         }
