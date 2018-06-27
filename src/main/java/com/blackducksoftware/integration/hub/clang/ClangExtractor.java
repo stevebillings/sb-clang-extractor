@@ -29,7 +29,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -82,12 +81,65 @@ public class ClangExtractor {
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final List<CompileCommand> compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
 
-        final Predicate<String> isNotBlank = (final String path) -> !StringUtils.isBlank(path);
+        final List<Dependency> bdioComponents = compileCommands.parallelStream()
+                .map(geConvertCompileCommandToDependencyFilePathsFunction(executor, dependencyFileManager, workingDir))
+                .reduce(new HashSet<>(), getStringsAccumulator()).parallelStream() // TODO: flatMap seems ok here
+                .filter((final String path) -> !StringUtils.isBlank(path))
+                .map((final String path) -> new File(path))
+                .filter(getFileIsNewPredicate())
+                .map(getConvertFileToPackagesFunction(sourceDir, executor, filesForIScan, pkgMgr))
+                .reduce(new HashSet<>(), getPackageAccumulator()).parallelStream() // TODO: flatMap totally breaks it here
+                .map(getConvertPackageToDependenciesFunction(pkgMgr))
+                .reduce(new ArrayList<Dependency>(), getDependenciesAccumulator()); // TODO: Collector
+        for (final Dependency bdioComponent : bdioComponents) {
+            logger.info(String.format("bdioComponent: %s", bdioComponent.externalId));
+        }
 
-        final Function<String, File> convertPathToFile = (final String path) -> {
-            return new File(path);
+        populateGraph(dependencyGraph, bdioComponents);
+        new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
+        return new ExtractorResults(bdioDocument, filesForIScan);
+    }
+
+    private BinaryOperator<List<Dependency>> getDependenciesAccumulator() {
+        final BinaryOperator<List<Dependency>> accumulateNewDependencies = (dependenciesAccumulator, newlyDiscoveredDependencies) -> {
+            dependenciesAccumulator.addAll(newlyDiscoveredDependencies);
+            return dependenciesAccumulator;
         };
+        return accumulateNewDependencies;
+    }
 
+    private Function<PackageDetails, List<Dependency>> getConvertPackageToDependenciesFunction(final PkgMgr pkgMgr) {
+        final Function<PackageDetails, List<Dependency>> convertPackageToDependencies = (final PackageDetails pkg) -> {
+            final List<Dependency> dependencies = new ArrayList<>();
+            logger.debug(String.format("Package name//arch//version: %s//%s//%s", pkg.getPackageName().orElse("<missing>"), pkg.getPackageArch().orElse("<missing>"),
+                    pkg.getPackageVersion().orElse("<missing>")));
+            if (dependencyAlreadyProcessed(pkg)) {
+                logger.trace(String.format("dependency %s has already been processed", pkg.toString()));
+            } else if (pkg.getPackageName().isPresent() && pkg.getPackageVersion().isPresent() && pkg.getPackageArch().isPresent()) {
+                dependencies.addAll(getBdioComponents(pkgMgr, pkg.getPackageName().get(), pkg.getPackageVersion().get(), pkg.getPackageArch().get()));
+            }
+            return dependencies;
+        };
+        return convertPackageToDependencies;
+    }
+
+    private BinaryOperator<Set<PackageDetails>> getPackageAccumulator() {
+        final BinaryOperator<Set<PackageDetails>> accumulateNewPackages = (packagesAccumulator, newlyDiscoveredPackages) -> {
+            packagesAccumulator.addAll(newlyDiscoveredPackages);
+            return packagesAccumulator;
+        };
+        return accumulateNewPackages;
+    }
+
+    private Function<File, Set<PackageDetails>> getConvertFileToPackagesFunction(final File sourceDir, final Executor executor, final Set<File> filesForIScan, final PkgMgr pkgMgr) {
+        final Function<File, Set<PackageDetails>> convertFileToPackages = (final File f) -> {
+            final DependencyFile dependencyFileWrapper = new DependencyFile(isUnder(sourceDir, f) ? true : false, f);
+            return new HashSet<>(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFileWrapper));
+        };
+        return convertFileToPackages;
+    }
+
+    private Predicate<File> getFileIsNewPredicate() {
         final Predicate<File> fileIsNew = (final File dependencyFile) -> {
             if (dependencyFileAlreadyProcessed(dependencyFile)) {
                 logger.trace(String.format("Dependency file %s has already been processed; excluding it", dependencyFile.getAbsolutePath()));
@@ -100,59 +152,18 @@ public class ClangExtractor {
             logger.trace(String.format("Dependency file %s does exist; including it", dependencyFile.getAbsolutePath()));
             return true;
         };
+        return fileIsNew;
+    }
 
-        final Function<File, Set<PackageDetails>> convertFileToPackages = (final File f) -> {
-            final DependencyFile dependencyFileWrapper = new DependencyFile(isUnder(sourceDir, f) ? true : false, f);
-            return new HashSet<>(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFileWrapper));
-        };
-
-        final Function<PackageDetails, List<Dependency>> convertPackageToDependencies = (final PackageDetails pkg) -> {
-            final List<Dependency> dependencies = new ArrayList<>();
-            logger.debug(String.format("Package name//arch//version: %s//%s//%s", pkg.getPackageName().orElse("<missing>"), pkg.getPackageArch().orElse("<missing>"),
-                    pkg.getPackageVersion().orElse("<missing>")));
-            if (dependencyAlreadyProcessed(pkg)) {
-                logger.trace(String.format("dependency %s has already been processed", pkg.toString()));
-            } else if (pkg.getPackageName().isPresent() && pkg.getPackageVersion().isPresent() && pkg.getPackageArch().isPresent()) {
-                dependencies.addAll(getBdioComponents(pkgMgr, pkg.getPackageName().get(), pkg.getPackageVersion().get(), pkg.getPackageArch().get()));
-            }
-            return dependencies;
-        };
-
+    private BinaryOperator<Set<String>> getStringsAccumulator() {
         final BinaryOperator<Set<String>> accumulateNewPaths = (pathsAccumulator, newlyDiscoveredPaths) -> {
             pathsAccumulator.addAll(newlyDiscoveredPaths);
             return pathsAccumulator;
         };
-
-        final BinaryOperator<Set<PackageDetails>> accumulateNewPackages = (packagesAccumulator, newlyDiscoveredPackages) -> {
-            packagesAccumulator.addAll(newlyDiscoveredPackages);
-            return packagesAccumulator;
-        };
-
-        final BinaryOperator<List<Dependency>> accumulateNewDependencies = (dependenciesAccumulator, newlyDiscoveredDependencies) -> {
-            dependenciesAccumulator.addAll(newlyDiscoveredDependencies);
-            return dependenciesAccumulator;
-        };
-
-        final List<Dependency> bdioComponents = compileCommands.parallelStream()
-                .map(getConvertCompileCommandToDependencyFilePaths(executor, dependencyFileManager, workingDir))
-                .flatMap(Collection::stream)
-                .filter(isNotBlank)
-                .map(convertPathToFile)
-                .filter(fileIsNew)
-                .map(convertFileToPackages)
-                .reduce(new HashSet<>(), accumulateNewPackages).parallelStream() // flatMap
-                .map(convertPackageToDependencies)
-                .reduce(new ArrayList<Dependency>(), accumulateNewDependencies); // Collector
-        for (final Dependency bdioComponent : bdioComponents) {
-            logger.info(String.format("bdioComponent: %s", bdioComponent.externalId));
-        }
-
-        populateGraph(dependencyGraph, bdioComponents);
-        new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
-        return new ExtractorResults(bdioDocument, filesForIScan);
+        return accumulateNewPaths;
     }
 
-    private Function<CompileCommand, Set<String>> getConvertCompileCommandToDependencyFilePaths(final Executor executor, final DependencyFileManager dependencyFileManager, final File workingDir) {
+    private Function<CompileCommand, Set<String>> geConvertCompileCommandToDependencyFilePathsFunction(final Executor executor, final DependencyFileManager dependencyFileManager, final File workingDir) {
         final Function<CompileCommand, Set<String>> convertCompileCommandToDependencyFilePaths = (final CompileCommand compileCommand) -> {
             final Set<String> dependencyFilePaths = new HashSet<>();
             final Optional<File> depsMkFile = generateDependencyFileByCompiling(executor, workingDir, compileCommand);
