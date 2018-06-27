@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -134,7 +135,7 @@ public class ClangExtractor {
 
         final List<Dependency> bdioComponents = compileCommands.parallelStream()
                 .map(getConvertCompileCommandToDependencyFilePaths(executor, dependencyFileManager, workingDir))
-                .reduce(new HashSet<>(), accumulateNewPaths).parallelStream() // flatMap
+                .flatMap(Collection::stream)
                 .filter(isNotBlank)
                 .map(convertPathToFile)
                 .filter(fileIsNew)
