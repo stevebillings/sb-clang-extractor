@@ -81,14 +81,6 @@ public class ClangExtractor {
         final MutableDependencyGraph dependencyGraph = new SimpleBdioFactory().createMutableDependencyGraph();
         final List<CompileCommand> compileCommands = parseCompileCommandsFile(compileCommandsJsonFilePath);
 
-        final Function<CompileCommand, Set<String>> convertCompileCommandToDependencyFilePaths = (final CompileCommand compileCommand) -> {
-            final Set<String> dependencyFilePaths = new HashSet<>();
-            final Optional<File> depsMkFile = generateDependencyFileByCompiling(executor, workingDir, compileCommand);
-            dependencyFilePaths.addAll(dependencyFileManager.parse(depsMkFile));
-            dependencyFileManager.remove(depsMkFile);
-            return dependencyFilePaths;
-        };
-
         final Predicate<String> isNotBlank = (final String path) -> !StringUtils.isBlank(path);
 
         final Function<String, File> convertPathToFile = (final String path) -> {
@@ -99,30 +91,20 @@ public class ClangExtractor {
             if (dependencyFileAlreadyProcessed(dependencyFile)) {
                 logger.trace(String.format("Dependency file %s has already been processed; excluding it", dependencyFile.getAbsolutePath()));
                 return false;
-            } else {
-                logger.trace(String.format("Dependency file %s has not been processed yet; including it", dependencyFile.getAbsolutePath()));
-                return true;
             }
-        };
-
-        final Predicate<File> fileExists = (final File dependencyFile) -> {
             if (!dependencyFile.exists()) {
                 logger.debug(String.format("Dependency file %s does NOT exist; excluding it", dependencyFile.getAbsolutePath()));
                 return false;
-            } else {
-                logger.trace(String.format("Dependency file %s does exist; including it", dependencyFile.getAbsolutePath()));
-                return true;
             }
+            logger.trace(String.format("Dependency file %s does exist; including it", dependencyFile.getAbsolutePath()));
+            return true;
         };
 
-        final Function<File, DependencyFile> wrapDependencyFile = (final File f) -> {
+        final Function<File, Set<PackageDetails>> convertFileToPackages = (final File f) -> {
             final DependencyFile dependencyFileWrapper = new DependencyFile(isUnder(sourceDir, f) ? true : false, f);
-            return dependencyFileWrapper;
+            return new HashSet<>(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFileWrapper));
         };
 
-        final Function<DependencyFile, Set<PackageDetails>> convertDependencyFileToPackages = (final DependencyFile dependencyFile) -> {
-            return new HashSet<>(pkgMgr.getDependencyDetails(executor, filesForIScan, dependencyFile));
-        };
         final Function<PackageDetails, List<Dependency>> convertPackageToDependencies = (final PackageDetails pkg) -> {
             final List<Dependency> dependencies = new ArrayList<>();
             logger.debug(String.format("Package name//arch//version: %s//%s//%s", pkg.getPackageName().orElse("<missing>"), pkg.getPackageArch().orElse("<missing>"),
@@ -151,17 +133,15 @@ public class ClangExtractor {
         };
 
         final List<Dependency> bdioComponents = compileCommands.parallelStream()
-                .map(convertCompileCommandToDependencyFilePaths)
-                .reduce(new HashSet<>(), accumulateNewPaths).parallelStream()
+                .map(getConvertCompileCommandToDependencyFilePaths(executor, dependencyFileManager, workingDir))
+                .reduce(new HashSet<>(), accumulateNewPaths).parallelStream() // flatMap
                 .filter(isNotBlank)
                 .map(convertPathToFile)
                 .filter(fileIsNew)
-                .filter(fileExists)
-                .map(wrapDependencyFile)
-                .map(convertDependencyFileToPackages)
-                .reduce(new HashSet<>(), accumulateNewPackages).parallelStream()
+                .map(convertFileToPackages)
+                .reduce(new HashSet<>(), accumulateNewPackages).parallelStream() // flatMap
                 .map(convertPackageToDependencies)
-                .reduce(new ArrayList<Dependency>(), accumulateNewDependencies);
+                .reduce(new ArrayList<Dependency>(), accumulateNewDependencies); // Collector
         for (final Dependency bdioComponent : bdioComponents) {
             logger.info(String.format("bdioComponent: %s", bdioComponent.externalId));
         }
@@ -169,6 +149,17 @@ public class ClangExtractor {
         populateGraph(dependencyGraph, bdioComponents);
         new SimpleBdioFactory().populateComponents(bdioDocument, projectExternalId, dependencyGraph);
         return new ExtractorResults(bdioDocument, filesForIScan);
+    }
+
+    private Function<CompileCommand, Set<String>> getConvertCompileCommandToDependencyFilePaths(final Executor executor, final DependencyFileManager dependencyFileManager, final File workingDir) {
+        final Function<CompileCommand, Set<String>> convertCompileCommandToDependencyFilePaths = (final CompileCommand compileCommand) -> {
+            final Set<String> dependencyFilePaths = new HashSet<>();
+            final Optional<File> depsMkFile = generateDependencyFileByCompiling(executor, workingDir, compileCommand);
+            dependencyFilePaths.addAll(dependencyFileManager.parse(depsMkFile));
+            dependencyFileManager.remove(depsMkFile);
+            return dependencyFilePaths;
+        };
+        return convertCompileCommandToDependencyFilePaths;
     }
 
     private void populateGraph(final MutableDependencyGraph graph, final List<Dependency> bdioComponents) {
